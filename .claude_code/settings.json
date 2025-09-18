@@ -1,0 +1,8 @@
+{
+  "hooks": {
+    "Stop": {
+      "command": "say 'Task completed successfully'",
+      "background": false
+    }
+  }
+}

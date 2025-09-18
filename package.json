@@ -1,0 +1,32 @@
+{
+  "name": "paperdog-blog",
+  "version": "1.0.0",
+  "description": "AI Papers Daily Blog - Automated paper aggregation and analysis",
+  "main": "worker-modules/functions/worker.js",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:prod": "wrangler deploy --env production",
+    "tail": "wrangler tail",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "ai",
+    "machine-learning",
+    "arxiv",
+    "huggingface",
+    "papers",
+    "blog",
+    "cloudflare-workers",
+    "automation"
+  ],
+  "author": "PaperDog Team",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

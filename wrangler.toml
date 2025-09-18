@@ -1,0 +1,37 @@
+name = "paperdog-blog"
+main = "worker-modules/functions/worker.js"
+compatibility_date = "2024-01-01"
+
+# Domain configuration
+[env.production]
+vars = { ENVIRONMENT = "production" }
+
+# Add smart placement for better resource allocation
+[placement]
+mode = "smart"
+
+# KV namespace for papers cache
+[[kv_namespaces]]
+binding = "PAPERS"
+id = "e37dbf3821ae4a21866582d91916b72b"
+preview_id = "e37dbf3821ae4a21866582d91916b72b"
+
+# Scheduled daily updates
+[triggers]
+crons = ["0 8 * * *"]  # Daily at 8 AM UTC
+
+# Environment variables
+[vars]
+# AI Service Configuration
+OPENROUTER_API_KEY = "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"
+SITE_TITLE = "PaperDog - AI论文每日更新"
+SITE_DESCRIPTION = "每日精选AI和计算机视觉最新论文研究"
+DOMAIN = "paperdog.org"
+
+# Paper sources configuration
+MAX_PAPERS_PER_DAY = 20
+MAX_CONCURRENT_REQUESTS = 3
+CACHE_TTL_HOURS = 24
+
+# arXiv categories to monitor
+ARXIV_CATEGORIES = "cs.CV,cs.AI,cs.LG,cs.CL,cs.RO"

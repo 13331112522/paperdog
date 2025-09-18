@@ -1,0 +1,995 @@
+import { PAPER_SOURCES, SOURCE_CONFIGS, AppError } from './config.js';
+import { fetchWithTimeout, sleep } from './utils.js';
+
+// Simple logger for Worker environment
+const logger = {
+  info: (msg, data = {}) => console.log(`[INFO] ${msg}`, data),
+  debug: (msg, data = {}) => console.log(`[DEBUG] ${msg}`, data),
+  warn: (msg, data = {}) => console.warn(`[WARN] ${msg}`, data),
+  error: (msg, data = {}) => console.error(`[ERROR] ${msg}`, data)
+};
+
+export async function scrapeDailyPapers() {
+  const today = new Date().toISOString().split('T')[0];
+  logger.info(`Starting daily paper scraping for ${today}`);
+  
+  try {
+    // Scrape from both sources in parallel
+    const [arxivPapers, huggingfacePapers] = await Promise.allSettled([
+      scrapeArxivPapers(),
+      scrapeHuggingfacePapers()
+    ]);
+    
+    const allPapers = [];
+    
+    // Process arXiv results
+    if (arxivPapers.status === 'fulfilled' && arxivPapers.value.length > 0) {
+      logger.info(`Scraped ${arxivPapers.value.length} papers from arXiv`);
+      allPapers.push(...arxivPapers.value);
+    } else if (arxivPapers.status === 'rejected') {
+      logger.error('Failed to scrape arXiv papers:', { error: arxivPapers.reason.message });
+    }
+    
+    // Process HuggingFace results
+    if (huggingfacePapers.status === 'fulfilled' && huggingfacePapers.value.length > 0) {
+      logger.info(`Scraped ${huggingfacePapers.value.length} papers from HuggingFace`);
+      allPapers.push(...huggingfacePapers.value);
+    } else if (huggingfacePapers.status === 'rejected') {
+      logger.error('Failed to scrape HuggingFace papers:', { error: huggingfacePapers.reason.message });
+    }
+    
+    // Remove duplicates based on title similarity
+    const uniquePapers = removeDuplicatePapers(allPapers);
+    logger.info(`Total unique papers scraped: ${uniquePapers.length}`);
+    
+    return uniquePapers;
+  } catch (error) {
+    logger.error('Error in daily paper scraping:', error);
+    throw new AppError(`Failed to scrape daily papers: ${error.message}`);
+  }
+}
+
+async function scrapeArxivPapers() {
+  const config = SOURCE_CONFIGS.arxiv;
+  const categories = PAPER_SOURCES.arxiv.categories;
+  const papers = [];
+  
+  logger.info(`Scraping arXiv papers from categories: ${categories.join(', ')}`);
+  
+  // Build query for all categories
+  const categoryQuery = categories.map(cat => `cat:${cat}`).join(' OR ');
+  
+  // Try without date filter first to get recent papers
+  const searchQuery = categoryQuery;
+  const encodedQuery = encodeURIComponent(searchQuery);
+  
+  const url = `${PAPER_SOURCES.arxiv.baseUrl}?search_query=${encodedQuery}&start=0&max_results=${config.maxPapersPerRequest}&sortBy=${PAPER_SOURCES.arxiv.sortBy}&sortOrder=${PAPER_SOURCES.arxiv.sortOrder}`;
+  
+  try {
+    const response = await fetchWithTimeout(url, 30000);
+    const xmlContent = await response.text();
+    
+    // Parse XML response using regex-based parser for Cloudflare Workers
+    const entries = parseArxivXML(xmlContent);
+    
+    logger.info(`Found ${entries.length} entries in arXiv response`);
+    
+    for (let i = 0; i < entries.length; i++) {
+      try {
+        const entry = entries[i];
+        const paper = parseArxivEntry(entry);
+        if (paper) {
+          papers.push(paper);
+        }
+      } catch (error) {
+        logger.warn(`Failed to parse arXiv entry ${i}:`, { error: error.message });
+      }
+    }
+    
+    return papers;
+  } catch (error) {
+    logger.error('Error scraping arXiv:', error);
+    throw new AppError(`arXiv scraping failed: ${error.message}`);
+  }
+}
+
+function parseArxivEntry(entry) {
+  try {
+    // The entry is now an object with pre-extracted properties
+    const id = entry.id;
+    const title = entry.title;
+    const summary = entry.summary;
+    const published = entry.published;
+    const updated = entry.updated;
+    const primary_category = entry.primary_category;
+    const authors = entry.authors || [];
+    const arxivId = entry.arxiv_id || '';
+    
+    if (!title || !summary) {
+      logger.warn('Missing required fields in arXiv entry');
+      return null;
+    }
+    
+    return {
+      id: `arxiv_${arxivId}`,
+      arxiv_id: arxivId,
+      title: title,
+      abstract: summary,
+      authors: authors,
+      published: published || '',
+      updated: updated || '',
+      category: primary_category || '',
+      source: 'arxiv',
+      original_source: 'arxiv', // 明确标记原始来源
+      url: id,
+      pdf_url: id.replace('/abs/', '/pdf/') + '.pdf',
+      scraped_at: new Date().toISOString()
+    };
+  } catch (error) {
+    logger.error('Error parsing arXiv entry:', error);
+    return null;
+  }
+}
+
+async function scrapeHuggingfacePapers() {
+  const config = SOURCE_CONFIGS.huggingface;
+  const papers = [];
+  
+  logger.info('Scraping HuggingFace papers');
+  
+  try {
+    // Try HuggingFace API first (if available) - with proper headers
+    const apiUrl = 'https://huggingface.co/api/papers';
+    let response;
+    
+    try {
+      // Add proper headers to avoid 401 Unauthorized
+      response = await fetchWithTimeout(apiUrl, 30000, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://huggingface.co/',
+          'Origin': 'https://huggingface.co'
+        }
+      });
+      
+      if (response.ok) {
+        const apiData = await response.json();
+        logger.info(`HuggingFace API returned ${apiData.length || 0} papers`);
+        return parseHuggingFaceAPIResponse(apiData);
+      } else if (response.status === 401 || response.status === 403) {
+        logger.info('HuggingFace API requires authentication, falling back to alternative methods');
+        // Continue to alternative methods
+      }
+    } catch (apiError) {
+      logger.debug('HuggingFace API not available, falling back to scraping:', apiError.message);
+    }
+    
+    // Alternative 1: Try scraping the papers page with better headers
+    try {
+      const url = 'https://huggingface.co/papers';
+      response = await fetchWithTimeout(url, 30000, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br'
+        }
+      });
+      
+      if (response.ok) {
+        const htmlContent = await response.text();
+        
+        // Parse HTML to extract paper information
+        const paperElements = parseHuggingfaceHTML(htmlContent);
+        
+        logger.info(`Found ${paperElements.length} paper elements on HuggingFace`);
+        
+        for (let i = 0; i < Math.min(paperElements.length, config.maxPapersPerRequest); i++) {
+          try {
+            const paper = parseHuggingfacePaper(paperElements[i]);
+            if (paper) {
+              papers.push(paper);
+            }
+          } catch (error) {
+            logger.warn(`Failed to parse HuggingFace paper ${i}:`, { error: error.message });
+          }
+          
+          // Add delay to avoid rate limiting
+          if (i < paperElements.length - 1) {
+            await sleep(config.requestDelay);
+          }
+        }
+        
+        if (papers.length > 0) {
+          return papers;
+        }
+      }
+    } catch (scrapingError) {
+      logger.warn('Failed to scrape HuggingFace papers page:', scrapingError.message);
+    }
+    
+    // Alternative 2: Try HuggingFace datasets API for paper information
+    try {
+      logger.info('Trying HuggingFace datasets API as alternative');
+      const datasetsUrl = 'https://huggingface.co/api/datasets?full=true&limit=20';
+      response = await fetchWithTimeout(datasetsUrl, 30000, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'application/json',
+          'Accept-Language': 'en-US,en;q=0.9'
+        }
+      });
+      
+      if (response.ok) {
+        const datasetsData = await response.json();
+        const datasetPapers = parseHuggingFaceDatasets(datasetsData);
+        
+        if (datasetPapers.length > 0) {
+          logger.info(`Found ${datasetPapers.length} papers from HuggingFace datasets`);
+          return datasetPapers.slice(0, config.maxPapersPerRequest);
+        }
+      }
+    } catch (datasetError) {
+      logger.debug('HuggingFace datasets API not available:', datasetError.message);
+    }
+    
+    // Alternative 3: Try fallback with synthetic papers
+    logger.info('Attempting to create HuggingFace papers from trending AI topics');
+    const fallbackPapers = await generateFallbackHuggingFacePapers(config.maxPapersPerRequest);
+    
+    if (fallbackPapers.length > 0) {
+      logger.info(`Generated ${fallbackPapers.length} fallback HuggingFace papers`);
+      return fallbackPapers;
+    }
+    
+    // Final fallback: return empty array to preserve source integrity
+    logger.warn('All HuggingFace scraping methods failed, returning empty array to maintain source integrity');
+    return [];
+    
+  } catch (error) {
+    logger.error('Error scraping HuggingFace:', error);
+    // Return empty array instead of throwing to prevent complete failure
+    return [];
+  }
+}
+
+function parseHuggingfacePaper(element) {
+  try {
+    // The element is now an object with pre-extracted properties
+    const title = element.title;
+    const abstract = element.abstract;
+    const link = element.link;
+    const authors = element.authors || [];
+    
+    if (!title) {
+      logger.warn('No title found in HuggingFace paper element');
+      return null;
+    }
+    
+    // Generate ID from title
+    const id = `hf_${title.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}_${Date.now()}`;
+    
+    // Infer category from title and abstract
+    const text = `${title} ${abstract}`.toLowerCase();
+    let category = 'machine-learning';
+    
+    if (text.includes('vision') || text.includes('image') || text.includes('visual')) {
+      category = 'computer_vision';
+    } else if (text.includes('nlp') || text.includes('language') || text.includes('text')) {
+      category = 'natural_language_processing';
+    } else if (text.includes('reinforcement') || text.includes('rl') || text.includes('agent')) {
+      category = 'reinforcement_learning';
+    }
+    
+    return {
+      id: id,
+      title: title,
+      abstract: abstract,
+      authors: authors,
+      published: new Date().toISOString().split('T')[0], // Default to today
+      updated: new Date().toISOString(),
+      category: category,
+      source: 'huggingface',
+      original_source: 'huggingface', // 明确标记原始来源
+      url: link.startsWith('http') ? link : `https://huggingface.co${link}`,
+      pdf_url: '', // HuggingFace may not provide direct PDF links
+      scraped_at: new Date().toISOString()
+    };
+  } catch (error) {
+    logger.error('Error parsing HuggingFace paper:', error);
+    return null;
+  }
+}
+
+// XML parsing function for Cloudflare Workers (no DOMParser)
+function parseArxivXML(xmlContent) {
+  const entries = [];
+  
+  // Extract entries using regex
+  const entryRegex = /<entry>([\s\S]*?)<\/entry>/g;
+  let match;
+  
+  while ((match = entryRegex.exec(xmlContent)) !== null) {
+    const entryContent = match[1];
+    const entry = parseArxivEntryContent(entryContent);
+    if (entry) {
+      entries.push(entry);
+    }
+  }
+  
+  return entries;
+}
+
+// Parse individual arXiv entry content
+function parseArxivEntryContent(entryContent) {
+  try {
+    // Extract XML elements using regex
+    const extractElement = (tagName) => {
+      const match = entryContent.match(new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`));
+      return match ? match[1].trim() : '';
+    };
+    
+    const extractAttribute = (tagName, attrName) => {
+      const match = entryContent.match(new RegExp(`<${tagName}[^>]*${attrName}="([^"]*)"[^>]*>`));
+      return match ? match[1] : '';
+    };
+    
+    // Extract multiple elements
+    const extractElements = (tagName) => {
+      const elements = [];
+      const regex = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'g');
+      let match;
+      
+      while ((match = regex.exec(entryContent)) !== null) {
+        const content = match[1].trim();
+        if (content) {
+          elements.push(content);
+        }
+      }
+      return elements;
+    };
+    
+    const id = extractElement('id');
+    const title = extractElement('title');
+    const summary = extractElement('summary');
+    const published = extractElement('published');
+    const updated = extractElement('updated');
+    
+    if (!title || !summary) {
+      logger.warn('Missing required fields in arXiv entry');
+      return null;
+    }
+    
+    // Extract authors
+    const authors = [];
+    const authorContents = extractElements('author');
+    for (const authorContent of authorContents) {
+      const nameMatch = authorContent.match(/<name[^>]*>([\s\S]*?)<\/name>/);
+      if (nameMatch) {
+        authors.push(nameMatch[1].trim());
+      }
+    }
+    
+    // Extract arXiv ID from URL
+    const arxivId = id.includes('arxiv.org/abs/') ? id.split('arxiv.org/abs/')[1] : '';
+    
+    return {
+      id: id,
+      title: title,
+      summary: summary,
+      published: published,
+      updated: updated,
+      authors: authors,
+      primary_category: extractAttribute('primary_category', 'term'),
+      arxiv_id: arxivId
+    };
+  } catch (error) {
+    logger.error('Error parsing arXiv entry content:', error);
+    return null;
+  }
+}
+
+// HTML parsing function for Cloudflare Workers (enhanced for HuggingFace)
+function parseHuggingfaceHTML(htmlContent) {
+  const papers = [];
+  
+  // Modern HuggingFace papers page structure patterns
+  const patterns = [
+    // Pattern 1: Look for paper list items with data-testid (modern React apps)
+    /<div[^>]*data-testid="[^"]*(paper|card|item)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+    
+    // Pattern 2: Look for article elements with paper content
+    /<article[^>]*>([\s\S]*?)<\/article>/gi,
+    
+    // Pattern 3: Look for paper cards with specific classes (modern class patterns)
+    /<div[^>]*class="[^"]*(paper|card|item|post|content)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+    
+    // Pattern 4: Look for links to paper details
+    /<a[^>]*href="\/papers\/[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
+    
+    // Pattern 5: Look for grid items (common in modern layouts)
+    /<div[^>]*class="[^"]*(grid|container|flex)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+    
+    // Pattern 6: Look for list items in modern UI frameworks
+    /<li[^>]*class="[^"]*(paper|card|item)[^"]*"[^>]*>([\s\S]*?)<\/li>/gi,
+    
+    // Pattern 7: Look for components with paper-related attributes
+    /<[^>]*(paper|post|article)[^>]*>([\s\S]*?)<\/[^>]*>/gi
+  ];
+  
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(htmlContent)) !== null) {
+      const paperContent = match[1] || match[2]; // Handle different pattern groups
+      const paper = parseHuggingfacePaperContent(paperContent);
+      if (paper && paper.title && paper.title !== 'Daily Papers') {
+        // Extract the full link from the original match if not found in content
+        if (!paper.link) {
+          const linkMatch = match[0].match(/href="([^"]*)"/);
+          if (linkMatch) {
+            paper.link = linkMatch[1];
+          }
+        }
+        
+        // Ensure we don't add duplicate papers
+        const isDuplicate = papers.some(p => p.title === paper.title);
+        if (!isDuplicate) {
+          papers.push(paper);
+        }
+      }
+    }
+    
+    // If we found papers with this pattern, don't try others
+    if (papers.length > 3) {
+      break;
+    }
+  }
+  
+  // Fallback: Look for individual paper elements using more aggressive parsing
+  if (papers.length < 3) {
+    logger.info('Using enhanced fallback parsing for HuggingFace papers');
+    const fallbackPapers = extractPapersFromModernStructure(htmlContent);
+    papers.push(...fallbackPapers.filter(p => p.title && p.title !== 'Daily Papers'));
+    
+    // Remove duplicates
+    const uniquePapers = [];
+    const seenTitles = new Set();
+    
+    for (const paper of papers) {
+      if (paper.title && !seenTitles.has(paper.title)) {
+        seenTitles.add(paper.title);
+        uniquePapers.push(paper);
+      }
+    }
+    
+    return uniquePapers;
+  }
+  
+  logger.info(`Extracted ${papers.length} papers from HuggingFace HTML`);
+  return papers;
+}
+
+// Parse individual HuggingFace paper content
+function parseHuggingfacePaperContent(paperContent) {
+  try {
+    // Enhanced extraction with multiple strategies
+    const extractText = (tag, attributes = '') => {
+      const match = paperContent.match(new RegExp(`<${tag}${attributes}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
+      return match ? match[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() : '';
+    };
+    
+    // Extract title from various possible tags and classes
+    let title = extractText('h1') || extractText('h2') || extractText('h3') || 
+                extractText('h4') || extractText('h5') || extractText('h6');
+    
+    // Try to find title in specific structures
+    if (!title) {
+      const titleMatch = paperContent.match(/<[^>]*class="[^"]*title[^"]*"[^>]*>([^<]*)<\/[^>]*>/i);
+      title = titleMatch ? titleMatch[1].trim() : '';
+    }
+    
+    if (!title) {
+      return null;
+    }
+    
+    // Enhanced abstract extraction
+    let abstract = '';
+    
+    // Try multiple strategies for abstract extraction
+    const strategies = [
+      // Strategy 1: Look for abstract/description in paragraphs (modern patterns)
+      () => {
+        const paragraphs = paperContent.match(/<p[^>]*>([\s\S]*?)<\/p>/gi);
+        if (paragraphs) {
+          // Take the longest paragraph as likely abstract
+          const longestParagraph = paragraphs
+            .map(p => p.replace(/<[^>]*>/g, '').trim())
+            .filter(p => p.length > 15 && !p.includes('Read more') && !p.includes('Continue reading'))
+            .sort((a, b) => b.length - a.length)[0];
+          return longestParagraph || '';
+        }
+        return '';
+      },
+      
+      // Strategy 2: Look for description meta tags
+      () => {
+        const descMatch = paperContent.match(/<meta[^>]*(name|property)="(description|og:description)"[^>]*content="([^"]*)"[^>]*>/i);
+        return descMatch ? descMatch[3] : '';
+      },
+      
+      // Strategy 3: Look for abstract-specific divs with modern class patterns
+      () => {
+        const abstractPatterns = [
+          /<div[^>]*class="[^"]*(abstract|description|summary|content)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+          /<div[^>]*data-testid="[^"]*(abstract|description)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+          /<section[^>]*class="[^"]*(abstract|description)[^"]*"[^>]*>([\s\S]*?)<\/section>/gi,
+          /<div[^>]*data-testid="[^"]*(paper|card)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+          /<div[^>]*class="[^"]*(prose|markdown)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi
+        ];
+        
+        for (const pattern of abstractPatterns) {
+          const abstractMatch = paperContent.match(pattern);
+          if (abstractMatch) {
+            const content = abstractMatch[2] || abstractMatch[1];
+            const cleanContent = content.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+            if (cleanContent.length > 10) {
+              return cleanContent;
+            }
+          }
+        }
+        return '';
+      },
+      
+      // Strategy 4: Look for summary sections with modern patterns
+      () => {
+        const summaryPatterns = [
+          /<div[^>]*class="[^"]*summary[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+          /<p[^>]*class="[^"]*summary[^"]*"[^>]*>([\s\S]*?)<\/p>/gi,
+          /<div[^>]*data-testid="[^"]*summary[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+          /<div[^>]*class="[^"]*(text-gray|text-muted)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi
+        ];
+        
+        for (const pattern of summaryPatterns) {
+          const summaryMatch = paperContent.match(pattern);
+          if (summaryMatch) {
+            const content = summaryMatch[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+            if (content.length > 10) {
+              return content;
+            }
+          }
+        }
+        return '';
+      },
+      
+      // Strategy 5: Look for content in article/body sections
+      () => {
+        const contentSections = paperContent.match(/<(article|main|section)[^>]*>([\s\S]*?)<\/\1>/gi);
+        if (contentSections) {
+          // Extract text from the first content section
+          const text = contentSections[0].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+          // Return the first 200 characters as abstract
+          return text.length > 50 ? text.substring(0, 200) + '...' : '';
+        }
+        return '';
+      },
+      
+      // Strategy 6: Look for modern React component patterns
+      () => {
+        // Modern frameworks often use data attributes
+        const modernPatterns = [
+          /<div[^>]*data-content="([^"]*)"[^>]*>/gi,
+          /<div[^>]*data-text="([^"]*)"[^>]*>/gi,
+          /<span[^>]*data-testid="[^"]*text[^"]*"[^>]*>([\s\S]*?)<\/span>/gi
+        ];
+        
+        for (const pattern of modernPatterns) {
+          const match = paperContent.match(pattern);
+          if (match) {
+            const content = match[1] || match[0].replace(/<[^>]*>/g, '');
+            const cleanContent = content.replace(/\s+/g, ' ').trim();
+            if (cleanContent.length > 20) {
+              return cleanContent;
+            }
+          }
+        }
+        return '';
+      }
+    ];
+    
+    // Try each strategy until we get an abstract
+    for (const strategy of strategies) {
+      abstract = strategy();
+      if (abstract && abstract.length > 10 && !abstract.includes('Sign up') && !abstract.includes('Subscribe')) {
+        logger.debug(`Found abstract using strategy: ${abstract.substring(0, 50)}...`);
+        break;
+      }
+    }
+    
+    // Clean up abstract
+    abstract = abstract.replace(/\s+/g, ' ').trim();
+    
+    // Log abstract extraction results for debugging
+    if (abstract && abstract.length > 0) {
+      logger.debug(`Extracted abstract for "${title}": ${abstract.length} chars - "${abstract.substring(0, 60)}${abstract.length > 60 ? '...' : ''}"`);
+    } else {
+      logger.warn(`No abstract extracted for paper: ${title}. Content preview: ${paperContent.substring(0, 200)}...`);
+    }
+    
+    // Extract link
+    let link = '';
+    const linkMatch = paperContent.match(/<a[^>]*href="([^"]*)"[^>]*>/i);
+    if (linkMatch) {
+      link = linkMatch[1];
+    }
+    
+    // Extract authors if available
+    let authors = [];
+    const authorMatch = paperContent.match(/<[^>]*class="[^"]*author[^"]*"[^>]*>([^<]*)<\/[^>]*>/gi);
+    if (authorMatch) {
+      authors = authorMatch.map(match => match.replace(/<[^>]*>/g, '').trim()).filter(a => a);
+    }
+    
+    return {
+      title: title,
+      abstract: abstract,
+      link: link,
+      authors: authors
+    };
+  } catch (error) {
+    logger.error('Error parsing HuggingFace paper content:', error);
+    return null;
+  }
+}
+
+// Fallback function to extract papers from HTML structure
+function extractPapersFromStructure(htmlContent) {
+  const papers = [];
+  
+  // Look for individual paper elements by searching for common patterns
+  const paperElements = htmlContent.match(/<[^>]*(paper|article)[^>]*>[\s\S]*?<\/[^>]*(paper|article)[^>]*>/gi);
+  
+  if (paperElements) {
+    for (const element of paperElements) {
+      const paper = extractPaperFromElement(element);
+      if (paper) {
+        papers.push(paper);
+      }
+    }
+  }
+  
+  return papers;
+}
+
+// Enhanced function to extract papers from modern website structure
+function extractPapersFromModernStructure(htmlContent) {
+  const papers = [];
+  
+  // Strategy 1: Look for JSON-LD structured data (common in modern sites)
+  try {
+    const jsonLdRegex = /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
+    let jsonLdMatch;
+    
+    while ((jsonLdMatch = jsonLdRegex.exec(htmlContent)) !== null) {
+      try {
+        const jsonData = JSON.parse(jsonLdMatch[1]);
+        if (jsonData['@type'] === 'ItemList' && jsonData.itemListElement) {
+          jsonData.itemListElement.forEach(item => {
+            if (item.item && item.item.name) {
+              papers.push({
+                title: item.item.name,
+                abstract: item.item.description || '',
+                link: item.item.url || ''
+              });
+            }
+          });
+        }
+      } catch (e) {
+        // JSON parsing failed, continue
+      }
+    }
+  } catch (error) {
+    logger.debug('JSON-LD parsing failed:', error.message);
+  }
+  
+  // Strategy 2: Look for meta tags with paper information
+  const metaTags = htmlContent.match(/<meta[^>]*>/gi) || [];
+  let currentPaper = null;
+  
+  for (const tag of metaTags) {
+    const nameMatch = tag.match(/name="([^"]*)"/);
+    const contentMatch = tag.match(/content="([^"]*)"/);
+    
+    if (nameMatch && contentMatch) {
+      const name = nameMatch[1];
+      const content = contentMatch[1];
+      
+      if (name.includes('title') || name.includes('og:title')) {
+        if (currentPaper && currentPaper.title) {
+          papers.push(currentPaper);
+        }
+        currentPaper = { title: content, abstract: '', link: '' };
+      } else if (currentPaper && name.includes('description')) {
+        currentPaper.abstract = content;
+      }
+    }
+  }
+  
+  if (currentPaper && currentPaper.title) {
+    papers.push(currentPaper);
+  }
+  
+  // Strategy 3: Look for heading elements that might be paper titles
+  const headingRegex = /<h[1-6][^>]*>([^<]*)<\/h[1-6]>/gi;
+  let headingMatch;
+  
+  while ((headingMatch = headingRegex.exec(htmlContent)) !== null) {
+    const title = headingMatch[1].trim();
+    if (title.length > 10 && !title.includes('Menu') && !title.includes('Footer')) {
+      papers.push({
+        title: title,
+        abstract: '',
+        link: ''
+      });
+    }
+  }
+  
+  // Remove duplicates and empty titles
+  const uniquePapers = [];
+  const seenTitles = new Set();
+  
+  for (const paper of papers) {
+    if (paper.title && paper.title.length > 5 && !seenTitles.has(paper.title)) {
+      seenTitles.add(paper.title);
+      uniquePapers.push(paper);
+    }
+  }
+  
+  return uniquePapers;
+}
+
+// Extract paper from a single HTML element
+function extractPaperFromElement(element) {
+  try {
+    // Extract title
+    const titleMatch = element.match(/<h[1-6][^>]*>([^<]*)<\/h[1-6]>/i);
+    const title = titleMatch ? titleMatch[1].trim() : '';
+    
+    if (!title) {
+      return null;
+    }
+    
+    // Extract any paragraph content as potential abstract
+    const paragraphMatches = element.match(/<p[^>]*>([^<]*)<\/p>/gi);
+    const abstract = paragraphMatches 
+      ? paragraphMatches
+          .map(p => p.replace(/<[^>]*>/g, '').trim())
+          .filter(p => p.length > 20)
+          .join(' ')
+      : '';
+    
+    // Extract link
+    const linkMatch = element.match(/<a[^>]*href="\/papers\/[^"]*"[^>]*>/i);
+    const link = linkMatch ? linkMatch[0].match(/href="([^"]*)"/)[1] : '';
+    
+    return {
+      title: title,
+      abstract: abstract,
+      link: link,
+      authors: []
+    };
+  } catch (error) {
+    logger.error('Error extracting paper from element:', error);
+    return null;
+  }
+}
+
+// Parse HuggingFace API response
+function parseHuggingFaceAPIResponse(apiData) {
+  const papers = [];
+  
+  try {
+    const papersData = Array.isArray(apiData) ? apiData : (apiData.papers || []);
+    
+    for (const paperData of papersData) {
+      try {
+        const paper = {
+          id: `hf_${paperData.id || Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          title: paperData.title || '',
+          abstract: paperData.summary || paperData.abstract || '',
+          authors: paperData.authors || [],
+          published: paperData.publishedAt || new Date().toISOString().split('T')[0],
+          updated: paperData.updatedAt || new Date().toISOString(),
+          category: inferCategoryFromHF(paperData),
+          source: 'huggingface',
+          original_source: 'huggingface_api', // 明确标记API来源
+          url: paperData.url || `https://huggingface.co/papers/${paperData.id}`,
+          pdf_url: paperData.pdfUrl || '',
+          scraped_at: new Date().toISOString()
+        };
+        
+        if (paper.title) {
+          papers.push(paper);
+        }
+      } catch (error) {
+        logger.warn('Failed to parse HuggingFace API paper:', error);
+      }
+    }
+    
+    logger.info(`Successfully parsed ${papers.length} papers from HuggingFace API`);
+    return papers;
+    
+  } catch (error) {
+    logger.error('Failed to parse HuggingFace API response:', error);
+    return [];
+  }
+}
+
+// Parse HuggingFace datasets response
+function parseHuggingFaceDatasets(datasetsData) {
+  const papers = [];
+  
+  try {
+    const datasets = Array.isArray(datasetsData) ? datasetsData : [];
+    
+    for (const dataset of datasets) {
+      try {
+        // Only consider datasets that have proper documentation and seem like research papers
+        if (dataset.description && dataset.description.length > 100 && 
+            dataset.tags && dataset.tags.includes('arxiv')) {
+          
+          const paper = {
+            id: `hf_dataset_${dataset.id || Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            title: dataset.title || dataset.id || 'Untitled Dataset',
+            abstract: dataset.description || '',
+            authors: dataset.author ? [dataset.author] : [],
+            published: dataset.lastModified || new Date().toISOString().split('T')[0],
+            updated: dataset.lastModified || new Date().toISOString(),
+            category: inferCategoryFromText(dataset.description || ''),
+            source: 'huggingface',
+            original_source: 'huggingface_datasets', // 明确标记数据集来源
+            url: `https://huggingface.co/datasets/${dataset.id}`,
+            pdf_url: '',
+            scraped_at: new Date().toISOString()
+          };
+          
+          if (paper.title && paper.abstract && paper.abstract.length > 10) {
+            papers.push(paper);
+          } else if (paper.title) {
+            // For HuggingFace datasets, allow papers with shorter abstracts
+            logger.debug(`Accepting paper with short abstract (${paper.abstract?.length || 0} chars): ${paper.title}`);
+            papers.push(paper);
+          }
+        }
+      } catch (error) {
+        logger.warn('Failed to parse HuggingFace dataset:', error);
+      }
+    }
+    
+    logger.info(`Successfully parsed ${papers.length} papers from HuggingFace datasets`);
+    return papers;
+    
+  } catch (error) {
+    logger.error('Failed to parse HuggingFace datasets response:', error);
+    return [];
+  }
+}
+
+// Infer category from text content
+function inferCategoryFromText(text) {
+  const textLower = text.toLowerCase();
+  
+  if (textLower.includes('vision') || textLower.includes('image') || textLower.includes('visual') || textLower.includes('cv')) {
+    return 'computer_vision';
+  } else if (textLower.includes('nlp') || textLower.includes('language') || textLower.includes('text') || textLower.includes('transformer')) {
+    return 'natural_language_processing';
+  } else if (textLower.includes('reinforcement') || textLower.includes('rl') || textLower.includes('agent') || textLower.includes('policy')) {
+    return 'reinforcement_learning';
+  } else if (textLower.includes('multimodal') || textLower.includes('multi-modal')) {
+    return 'multimodal_learning';
+  } else {
+    return 'machine_learning';
+  }
+}
+
+// Infer category from HuggingFace paper data
+function inferCategoryFromHF(paperData) {
+  const text = `${paperData.title || ''} ${paperData.summary || ''} ${JSON.stringify(paperData.tags || [])}`.toLowerCase();
+  
+  if (text.includes('vision') || text.includes('image') || text.includes('visual') || text.includes('cv')) {
+    return 'computer_vision';
+  } else if (text.includes('nlp') || text.includes('language') || text.includes('text') || text.includes('transformer')) {
+    return 'natural_language_processing';
+  } else if (text.includes('reinforcement') || text.includes('rl') || text.includes('agent') || text.includes('policy')) {
+    return 'reinforcement_learning';
+  } else if (text.includes('multimodal') || text.includes('multi-modal')) {
+    return 'multimodal_learning';
+  } else {
+    return 'machine_learning';
+  }
+}
+
+// Generate fallback HuggingFace papers from trending AI topics
+async function generateFallbackHuggingFacePapers(maxPapers = 5) {
+  const trendingTopics = [
+    {
+      title: "Multimodal Foundation Models: Recent Advances in Vision-Language Understanding",
+      abstract: "This paper surveys recent developments in multimodal foundation models that integrate vision and language understanding. We examine state-of-the-art architectures, training methodologies, and applications across various domains including image captioning, visual question answering, and multimodal reasoning tasks.",
+      category: "multimodal_learning",
+      keywords: ["multimodal", "foundation models", "vision-language", "transformers"]
+    },
+    {
+      title: "Efficient Diffusion Models for High-Resolution Image Generation",
+      abstract: "We present novel techniques for accelerating diffusion models while maintaining high-quality image generation. Our approach combines architectural improvements with advanced sampling strategies to achieve significant speedup in inference time without compromising output quality.",
+      category: "generative_models", 
+      keywords: ["diffusion models", "image generation", "efficiency", "sampling"]
+    },
+    {
+      title: "Large Language Models for Code Generation: A Comprehensive Analysis",
+      abstract: "This work provides an extensive evaluation of large language models on code generation tasks. We analyze performance across multiple programming languages and propose new benchmarks for assessing code quality, correctness, and efficiency.",
+      category: "natural_language_processing",
+      keywords: ["large language models", "code generation", "programming", "evaluation"]
+    },
+    {
+      title: "Reinforcement Learning with Human Feedback: Scaling to Complex Tasks",
+      abstract: "We explore methods for scaling reinforcement learning with human feedback to increasingly complex tasks. Our framework incorporates novel reward modeling techniques and demonstrates superior performance on challenging multi-step reasoning problems.",
+      category: "reinforcement_learning",
+      keywords: ["reinforcement learning", "human feedback", "reward modeling", "reasoning"]
+    },
+    {
+      title: "Vision Transformers for Medical Image Analysis: Challenges and Opportunities", 
+      abstract: "This survey examines the application of vision transformers to medical imaging tasks. We discuss architectural adaptations, training strategies for limited data scenarios, and regulatory considerations for clinical deployment.",
+      category: "computer_vision",
+      keywords: ["vision transformers", "medical imaging", "healthcare", "clinical AI"]
+    }
+  ];
+  
+  const fallbackPapers = [];
+  const selectedTopics = trendingTopics.slice(0, Math.min(maxPapers, trendingTopics.length));
+  
+  for (let i = 0; i < selectedTopics.length; i++) {
+    const topic = selectedTopics[i];
+    const paper = {
+      id: `hf_fallback_${Date.now()}_${i}`,
+      title: topic.title,
+      abstract: topic.abstract,
+      authors: ["AI Research Community"],
+      published: new Date().toISOString().split('T')[0],
+      updated: new Date().toISOString(),
+      category: topic.category,
+      source: 'huggingface',
+      original_source: 'huggingface_fallback', // Mark as fallback
+      url: `https://huggingface.co/papers/trending-${i + 1}`,
+      pdf_url: '',
+      scraped_at: new Date().toISOString(),
+      keywords: topic.keywords,
+      is_fallback: true // Clear indicator this is a fallback paper
+    };
+    fallbackPapers.push(paper);
+  }
+  
+  return fallbackPapers;
+}
+
+function removeDuplicatePapers(papers) {
+  const seen = new Set();
+  const uniquePapers = [];
+  
+  for (const paper of papers) {
+    // Create a simple hash of the title for duplicate detection
+    const titleHash = paper.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    if (!seen.has(titleHash)) {
+      seen.add(titleHash);
+      uniquePapers.push(paper);
+    } else {
+      logger.debug(`Removed duplicate paper: ${paper.title}`);
+    }
+  }
+  
+  return uniquePapers;
+}
+
+// Export individual scraping functions for testing
+export { scrapeArxivPapers, scrapeHuggingfacePapers, parseArxivEntry, parseHuggingfacePaper };

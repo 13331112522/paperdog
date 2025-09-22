@@ -346,6 +346,7 @@ export function filterAndSortPapers(papers, options = {}) {
   try {
     const now = new Date();
     const cutoffDate = new Date(now.getTime() - daysAgoLimit * 24 * 60 * 60 * 1000);
+    const date = now.toISOString().split('T')[0]; // For seeding random
     
     // 1. 为所有论文计算评分
     const scoredPapers = papers.map(paper => calculateComprehensiveScore(paper));
@@ -377,43 +378,50 @@ export function filterAndSortPapers(papers, options = {}) {
     
     logger.info(`Filtered ${scoredPapers.length} papers to ${filteredPapers.length} papers`);
     
-    // 3. 排序论文
+    // 3. 排序论文 (with random tie-breaking)
     const sortedPapers = filteredPapers.sort((a, b) => {
+      const random = createSeededRandom(date);
+      
       // 主要按总分排序
       const scoreDiff = b.scoring.total_score - a.scoring.total_score;
-      if (Math.abs(scoreDiff) > 0.1) {
+      if (Math.abs(scoreDiff) > 0.01) {
         return scoreDiff;
       }
       
       // 分数相同时，按新鲜度排序
       const recencyDiff = b.scoring.recency_score - a.scoring.recency_score;
-      if (Math.abs(recencyDiff) > 0.1) {
+      if (Math.abs(recencyDiff) > 0.01) {
         return recencyDiff;
       }
       
       // 再按相关性排序
       const relevanceDiff = b.scoring.relevance_score - a.scoring.relevance_score;
-      if (Math.abs(relevanceDiff) > 0.1) {
+      if (Math.abs(relevanceDiff) > 0.01) {
         return relevanceDiff;
       }
       
-      // 最后按发布时间排序
-      try {
-        return new Date(b.published) - new Date(a.published);
-      } catch {
-        return 0;
-      }
+      // 最后按随机排序 (for tie-breaking)
+      return random() - 0.5;
     });
     
     // 4. 选择Top N论文（确保从arXiv和HuggingFace各选5篇）
     let topPapers;
     if (ensureBothSources && maxPapers >= 10) {
-      topPapers = selectPapersFromBothSources(sortedPapers, maxPapers);
+      topPapers = selectPapersFromBothSources(sortedPapers, maxPapers, date);
     } else {
       topPapers = sortedPapers.slice(0, maxPapers);
     }
     
+    // 5. Validate the selection
+    const validation = validatePaperSelection(topPapers, options);
+    if (!validation.isValid) {
+      logger.warn('Paper selection validation failed:', validation.issues);
+    } else {
+      logger.info('Paper selection validation passed');
+    }
+    
     logger.info(`Selected top ${topPapers.length} papers from ${filteredPapers.length} filtered papers`);
+    logger.info(`Selection validation: ${JSON.stringify(validation.summary)}`);
     
     return topPapers;
   } catch (error) {
@@ -425,8 +433,90 @@ export function filterAndSortPapers(papers, options = {}) {
   }
 }
 
+// Validate paper selection results
+function validatePaperSelection(papers, options) {
+  const { maxPapers = 10, ensureBothSources = true } = options;
+  const issues = [];
+  const summary = {
+    total_papers: papers.length,
+    arxiv_count: 0,
+    huggingface_count: 0,
+    other_count: 0,
+    average_score: 0,
+    score_range: { min: 10, max: 0 }
+  };
+  
+  if (papers.length === 0) {
+    issues.push('No papers selected');
+    return { isValid: false, issues, summary };
+  }
+  
+  // Count sources
+  papers.forEach(paper => {
+    const sourceType = paper.scoring?.source_type || 'unknown';
+    if (sourceType === 'arxiv.org') {
+      summary.arxiv_count++;
+    } else if (sourceType === 'huggingface.co') {
+      summary.huggingface_count++;
+    } else {
+      summary.other_count++;
+    }
+    
+    const score = paper.scoring?.total_score || 0;
+    summary.average_score += score;
+    summary.score_range.min = Math.min(summary.score_range.min, score);
+    summary.score_range.max = Math.max(summary.score_range.max, score);
+  });
+  
+  summary.average_score = summary.average_score / papers.length;
+  
+  // Validate count
+  if (papers.length > maxPapers) {
+    issues.push(`Too many papers selected: ${papers.length} > ${maxPapers}`);
+  } else if (papers.length < maxPapers / 2) {
+    issues.push(`Too few papers selected: ${papers.length} < ${maxPapers / 2}`);
+  }
+  
+  // Validate source balance if required
+  if (ensureBothSources) {
+    const targetPerSource = Math.floor(maxPapers / 2);
+    if (summary.arxiv_count < targetPerSource / 2) {
+      issues.push(`Insufficient arXiv papers: ${summary.arxiv_count} < ${targetPerSource / 2}`);
+    }
+    if (summary.huggingface_count < targetPerSource / 2) {
+      issues.push(`Insufficient HuggingFace papers: ${summary.huggingface_count} < ${targetPerSource / 2}`);
+    }
+    if (summary.arxiv_count + summary.huggingface_count < maxPapers * 0.8) {
+      issues.push('Poor source balance - too many other/unknown sources');
+    }
+  }
+  
+  // Validate scores
+  if (summary.score_range.min < 4.0) {
+    issues.push(`Low minimum score: ${summary.score_range.min} < 4.0`);
+  }
+  
+  const isValid = issues.length === 0;
+  
+  return { isValid, issues, summary };
+}
+
+function createSeededRandom(dateString) {
+  // Simple seeded random function based on date for consistent daily selection
+  let seed = 0;
+  for (let i = 0; i < dateString.length; i++) {
+    seed += dateString.charCodeAt(i) * 31;
+  }
+  seed = seed % 2147483647;
+  
+  return function() {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+}
+
 // 从两个来源各选5篇论文
-function selectPapersFromBothSources(sortedPapers, maxPapers = 10) {
+function selectPapersFromBothSources(sortedPapers, maxPapers = 10, date = new Date().toISOString().split('T')[0]) {
   const arxivPapers = [];
   const huggingfacePapers = [];
   const unknownPapers = [];
@@ -465,16 +555,41 @@ function selectPapersFromBothSources(sortedPapers, maxPapers = 10) {
     return sortedPapers.slice(0, maxPapers);
   }
   
+  // Create seeded random for consistent daily selection
+  const random = createSeededRandom(date);
+  
+  // Sort arXiv papers with random tie-breaking for equal scores
+  arxivPapers.sort((a, b) => {
+    const scoreDiff = b.scoring.total_score - a.scoring.total_score;
+    if (Math.abs(scoreDiff) > 0.01) { // Small threshold for "equal" scores
+      return scoreDiff;
+    }
+    // For equal scores, use random tie-breaking
+    return random() - 0.5;
+  });
+  
+  // Sort HuggingFace papers with random tie-breaking for equal scores
+  huggingfacePapers.sort((a, b) => {
+    const scoreDiff = b.scoring.total_score - a.scoring.total_score;
+    if (Math.abs(scoreDiff) > 0.01) {
+      return scoreDiff;
+    }
+    // For equal scores, use random tie-breaking
+    return random() - 0.5;
+  });
+  
   const selectedPapers = [];
   const targetPerSource = Math.floor(maxPapers / 2); // 每个来源目标5篇
   
-  // 从arXiv选择
-  const arxivSelected = arxivPapers.slice(0, targetPerSource);
+  // 从arXiv选择 top 5 (with random tie-breaking already applied)
+  const arxivSelected = arxivPapers.slice(0, Math.min(targetPerSource, arxivPapers.length));
   selectedPapers.push(...arxivSelected);
+  logger.info(`Selected ${arxivSelected.length} arXiv papers (target: ${targetPerSource})`);
   
-  // 从HuggingFace选择
-  const huggingfaceSelected = huggingfacePapers.slice(0, targetPerSource);
+  // 从HuggingFace选择 top 5 (with random tie-breaking already applied)
+  const huggingfaceSelected = huggingfacePapers.slice(0, Math.min(targetPerSource, huggingfacePapers.length));
   selectedPapers.push(...huggingfaceSelected);
+  logger.info(`Selected ${huggingfaceSelected.length} HuggingFace papers (target: ${targetPerSource})`);
   
   logger.info(`Initial selection: ${arxivSelected.length} arXiv + ${huggingfaceSelected.length} HuggingFace = ${selectedPapers.length} papers`);
   
@@ -483,32 +598,42 @@ function selectPapersFromBothSources(sortedPapers, maxPapers = 10) {
     const remainingSlots = maxPapers - selectedPapers.length;
     const remainingPapers = [];
     
-    // 1. 优先从有论文但数量不足的来源补充
+    // 1. 优先从有论文但数量不足的来源补充 (already sorted with random)
     if (arxivSelected.length < targetPerSource && arxivPapers.length > arxivSelected.length) {
-      remainingPapers.push(...arxivPapers.slice(arxivSelected.length));
+      remainingPapers.push(...arxivPapers.slice(arxivSelected.length, arxivSelected.length + remainingSlots));
     }
     if (huggingfaceSelected.length < targetPerSource && huggingfacePapers.length > huggingfaceSelected.length) {
-      remainingPapers.push(...huggingfacePapers.slice(huggingfaceSelected.length));
+      remainingPapers.push(...huggingfacePapers.slice(huggingfaceSelected.length, huggingfaceSelected.length + remainingSlots));
     }
     
-    // 2. 添加未分类的论文
+    // 2. 添加未分类的论文 (sort with random tie-breaking)
+    unknownPapers.sort((a, b) => {
+      const scoreDiff = b.scoring.total_score - a.scoring.total_score;
+      if (Math.abs(scoreDiff) > 0.01) {
+        return scoreDiff;
+      }
+      return random() - 0.5;
+    });
     remainingPapers.push(...unknownPapers);
     
-    // 按分数排序并选择
-    const sortedRemaining = remainingPapers.sort((a, b) => 
-      b.scoring.total_score - a.scoring.total_score
-    );
-    
-    const backupSelected = sortedRemaining.slice(0, remainingSlots);
+    // 选择剩余的
+    const backupSelected = remainingPapers.slice(0, remainingSlots);
     selectedPapers.push(...backupSelected);
     
     logger.info(`Added ${backupSelected.length} backup papers to reach ${selectedPapers.length} total papers`);
   }
   
-  // 确保总数不超过maxPapers并重新排序
+  // 确保总数不超过maxPapers并按总分重新排序 (preserve source balance but order by score)
   const finalPapers = selectedPapers
     .slice(0, maxPapers)
-    .sort((a, b) => b.scoring.total_score - a.scoring.total_score);
+    .sort((a, b) => {
+      const scoreDiff = b.scoring.total_score - a.scoring.total_score;
+      if (Math.abs(scoreDiff) > 0.01) {
+        return scoreDiff;
+      }
+      // Final tie-breaking: random
+      return random() - 0.5;
+    });
   
   // 最终统计和验证
   const finalArxivCount = finalPapers.filter(p => p.scoring.source_type === 'arxiv.org').length;
@@ -516,13 +641,35 @@ function selectPapersFromBothSources(sortedPapers, maxPapers = 10) {
   const finalOtherCount = finalPapers.filter(p => !['arxiv.org', 'huggingface.co'].includes(p.scoring.source_type)).length;
   
   logger.info(`Final selection summary: ${finalArxivCount} arXiv + ${finalHuggingfaceCount} HuggingFace + ${finalOtherCount} other = ${finalPapers.length} total`);
+  logger.info(`Random seed used for date: ${date}`);
+  
+  // Enhanced logging for source distribution
+  logger.info(`Source distribution details:`, {
+    arxiv: {
+      total_available: arxivPapers.length,
+      selected: finalArxivCount,
+      top_scores: arxivPapers.slice(0, 3).map(p => ({ title: p.title.substring(0, 30) + '...', score: p.scoring.total_score }))
+    },
+    huggingface: {
+      total_available: huggingfacePapers.length,
+      selected: finalHuggingfaceCount,
+      top_scores: huggingfacePapers.slice(0, 3).map(p => ({ title: p.title.substring(0, 30) + '...', score: p.scoring.total_score }))
+    },
+    other: {
+      total_available: unknownPapers.length,
+      selected: finalOtherCount
+    }
+  });
   
   // 如果分布不理想，记录警告
   if (finalArxivCount === 0) {
-    logger.warn('No arXiv papers in final selection - check arXiv scraping');
+    logger.warn('No arXiv papers in final selection - check arXiv scraping and source classification');
   }
   if (finalHuggingfaceCount === 0) {
-    logger.warn('No HuggingFace papers in final selection - check HuggingFace scraping');
+    logger.warn('No HuggingFace papers in final selection - check HuggingFace scraping and source classification');
+  }
+  if (finalOtherCount > 2) {
+    logger.warn(`High number of other/unknown source papers: ${finalOtherCount} - review source detection logic`);
   }
   
   return finalPapers;

@@ -65,35 +65,22 @@ export async function handleRoot(request, env) {
 
     // Try to get daily report
     if (papers && papers.length > 0) {
-      // Sort papers by relevance score with random tie-breaking for consistent top 10
-      papers.sort((a, b) => {
-        const scoreA = (a.analysis?.relevance_score || a.scoring?.total_score || 5);
-        const scoreB = (b.analysis?.relevance_score || b.scoring?.total_score || 5);
-
-        // Primary sort: higher score first
-        if (Math.abs(scoreB - scoreA) > 0.1) {
-          return scoreB - scoreA;
-        }
-
-        // Secondary sort: random tie-breaking for identical scores
-        if (scoreA === scoreB) {
-          return Math.random() - 0.5; // Random -0.5 to 0.5
-        }
-
-        // Tertiary sort: newer papers first if scores are very close
-        const dateA = new Date(a.published || a.scraped_at || 0);
-        const dateB = new Date(b.published || b.scraped_at || 0);
-        return dateB - dateA;
+      // Use enhanced filtering and sorting with source balancing and random tie-breaking
+      const displayPapers = filterAndSortPapers(papers, {
+        ensureBothSources: true,
+        maxPapers: 10,
+        minScore: 5.0 // Lower threshold to ensure we get 10 papers when possible
       });
 
-      dailyReport = await generateDailyReport(papers, targetDate);
+      // Use the filtered papers for daily report
+      dailyReport = await generateDailyReport(displayPapers, targetDate);
+      
+      // Set displayPapers to the balanced selection
+      papers = displayPapers; // Update papers to the balanced selection for consistency
     }
 
-    // Limit to top 10 papers by relevance score for mainpage display
-    let displayPapers = papers || [];
-    if (displayPapers.length > 10) {
-      displayPapers = displayPapers.slice(0, 10); // Take top 10 (already sorted above)
-    }
+    // displayPapers is now the balanced top 10 from filterAndSortPapers
+    const displayPapers = papers || [];
 
     // Get visitor stats for display
     const visitorStats = await getVisitorStats(env);
@@ -287,31 +274,15 @@ export async function handleUpdatePapers(request, env) {
     // Step 4: Generate daily report
     const dailyReport = await generateDailyReport(analyzedPapers, today);
 
-    // Step 5: Archive top 10 papers for long-term storage
+    // Step 5: Archive top 10 papers for long-term storage using balanced selection
     let archiveResult = null;
     try {
-      // Sort papers by relevance score with random tie-breaking for consistent top 10 selection
-      const topPapers = [...analyzedPapers]
-        .sort((a, b) => {
-          const scoreA = (a.analysis?.relevance_score || a.scoring?.total_score || 5);
-          const scoreB = (b.analysis?.relevance_score || b.scoring?.total_score || 5);
-
-          // Primary sort: higher score first
-          if (Math.abs(scoreB - scoreA) > 0.1) {
-            return scoreB - scoreA;
-          }
-
-          // Secondary sort: random tie-breaking for identical scores
-          if (scoreA === scoreB) {
-            return Math.random() - 0.5; // Random -0.5 to 0.5
-          }
-
-          // Tertiary sort: newer papers first if scores are very close
-          const dateA = new Date(a.published || a.scraped_at || 0);
-          const dateB = new Date(b.published || b.scraped_at || 0);
-          return dateB - dateA;
-        })
-        .slice(0, 10); // Archive only top 10 papers
+      // Use enhanced filtering and sorting with source balancing and random tie-breaking
+      const topPapers = filterAndSortPapers(analyzedPapers, {
+        ensureBothSources: true,
+        maxPapers: 10,
+        minScore: 5.0 // Lower threshold to ensure we get 10 papers when possible
+      });
 
       archiveResult = await archivePapers(today, topPapers, env, {
         source: 'daily_update',

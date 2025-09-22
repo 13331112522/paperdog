@@ -72,14 +72,14 @@ export const TOPIC_CATEGORIES = [
 // Source-specific scraping configurations
 export const SOURCE_CONFIGS = {
   arxiv: {
-    maxPapersPerRequest: 50,
+    maxPapersPerRequest: 15,
     requestDelay: 1000,
     retryAttempts: 3,
     dateRange: 7, // Last 7 days to get more results
     fields: 'id,title,summary,authors,published,updated,primary_category'
   },
   huggingface: {
-    maxPapersPerRequest: 30,
+    maxPapersPerRequest: 10,
     requestDelay: 2000,
     retryAttempts: 3,
     dateRange: 1,

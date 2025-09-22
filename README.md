@@ -276,7 +276,7 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 
 - 项目主页: https://paperdog.org
 - 问题反馈: 通过GitHub Issues
-- 邮箱: contact@paperdog.org
+- 邮箱: 13331112522@189.cn
 
 ---
 

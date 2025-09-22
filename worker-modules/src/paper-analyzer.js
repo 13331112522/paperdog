@@ -56,39 +56,57 @@ export async function analyzePapers(papers, apiKey) {
 export async function analyzeSinglePaper(paper, apiKey) {
   try {
     logger.debug(`Analyzing paper: ${paper.title}`);
-    
+
     // Check if paper already has analysis (cached)
     if (paper.analysis && paper.analysis.summary) {
       logger.debug(`Paper ${paper.id} already has analysis, skipping`);
       return paper;
     }
-    
+
     // Prepare analysis prompt
     const prompt = PAPER_ANALYSIS_PROMPT
       .replace('{title}', paper.title)
       .replace('{authors}', paper.authors ? paper.authors.join(', ') : 'Unknown')
       .replace('{abstract}', paper.abstract || 'No abstract available')
       .replace('{published}', paper.published || 'Unknown');
-    
-    // Call LLM for analysis
-    const analysisResult = await callLLM(prompt, MODEL_CONFIG.analysis, MODEL_PARAMS.analysis, apiKey);
-    
+
+    let analysisResult = null;
+    let modelUsed = MODEL_CONFIG.analysis;
+
+    // Try primary model first
+    try {
+      analysisResult = await callLLM(prompt, MODEL_CONFIG.analysis, MODEL_PARAMS.analysis, apiKey);
+      logger.debug(`Primary model (${MODEL_CONFIG.analysis}) succeeded`);
+    } catch (primaryError) {
+      logger.warn(`Primary model failed, trying fallback:`, primaryError.message);
+
+      // Try fallback model
+      try {
+        analysisResult = await callLLM(prompt, MODEL_CONFIG.fallback_analysis, MODEL_PARAMS.analysis, apiKey);
+        modelUsed = MODEL_CONFIG.fallback_analysis;
+        logger.debug(`Fallback model (${MODEL_CONFIG.fallback_analysis}) succeeded`);
+      } catch (fallbackError) {
+        logger.error(`Both models failed for paper ${paper.title}:`, fallbackError);
+        throw new AppError(`Failed to analyze paper with both models: ${fallbackError.message}`);
+      }
+    }
+
     // Parse the JSON response
     const analysis = parseAnalysisResponse(analysisResult);
-    
+
     // Add analysis to paper
     const analyzedPaper = {
       ...paper,
       analysis: {
         ...analysis,
         analyzed_at: new Date().toISOString(),
-        model: MODEL_CONFIG.analysis
+        model: modelUsed
       }
     };
-    
+
     logger.debug(`Successfully analyzed paper: ${paper.title}`);
     return analyzedPaper;
-    
+
   } catch (error) {
     logger.error(`Failed to analyze paper ${paper.title}:`, error);
     throw error; // Re-throw to be handled by the caller
@@ -97,14 +115,14 @@ export async function analyzeSinglePaper(paper, apiKey) {
 
 async function callLLM(prompt, model, params, apiKey) {
   const url = 'https://openrouter.ai/api/v1/chat/completions';
-  
+
   const headers = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${apiKey}`,
     'HTTP-Referer': 'https://paperdog.org',
     'X-Title': 'PaperDog'
   };
-  
+
   const requestBody = {
     model: model,
     messages: [
@@ -121,35 +139,54 @@ async function callLLM(prompt, model, params, apiKey) {
     max_tokens: params.max_tokens || 1000,
     response_format: { type: 'json_object' }
   };
-  
-  try {
-    const response = await fetchWithTimeout(url, 60000, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(requestBody)
-    });
+
+  // Retry logic for network failures
+  const maxRetries = 3;
+  const baseTimeout = 90000; // 90 seconds
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const timeout = baseTimeout * attempt; // Exponential backoff
+      logger.debug(`LLM API call attempt ${attempt}/${maxRetries} with ${timeout}ms timeout`);
+
+      const response = await fetchWithTimeout(url, timeout, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(requestBody)
+      });
     
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new AppError(`LLM API error: ${response.status} - ${errorText}`);
+        const errorText = await response.text();
+        throw new AppError(`LLM API error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        throw new AppError('Invalid LLM response format');
+      }
+
+      const content = data.choices[0].message.content;
+      if (!content) {
+        throw new AppError('Empty LLM response');
+      }
+
+      logger.debug(`LLM API call succeeded on attempt ${attempt}`);
+      return content;
+
+    } catch (error) {
+      logger.warn(`LLM API call failed on attempt ${attempt}:`, error.message);
+
+      if (attempt === maxRetries) {
+        logger.error('All LLM API call attempts failed:', error);
+        throw new AppError(`Failed to call LLM API after ${maxRetries} attempts: ${error.message}`);
+      }
+
+      // Wait before retry (exponential backoff)
+      const retryDelay = Math.min(2000 * attempt, 8000); // Max 8 seconds
+      logger.debug(`Waiting ${retryDelay}ms before retry...`);
+      await sleep(retryDelay);
     }
-    
-    const data = await response.json();
-    
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      throw new AppError('Invalid LLM response format');
-    }
-    
-    const content = data.choices[0].message.content;
-    if (!content) {
-      throw new AppError('Empty LLM response');
-    }
-    
-    return content;
-    
-  } catch (error) {
-    logger.error('LLM API call failed:', error);
-    throw error;
   }
 }
 

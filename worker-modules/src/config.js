@@ -90,6 +90,7 @@ export const SOURCE_CONFIGS = {
 // Model configuration for paper analysis
 export const MODEL_CONFIG = {
   analysis: 'openai/gpt-4o-mini',
+  fallback_analysis: 'google/gemini-2.0-flash-001',
   summary: 'google/gemini-2.0-flash-001',
   translation: 'google/gemini-2.0-flash-001'
 };

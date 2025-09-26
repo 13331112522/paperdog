@@ -92,7 +92,7 @@ export async function analyzeSinglePaper(paper, apiKey) {
     }
 
     // Parse the JSON response
-    const analysis = parseAnalysisResponse(analysisResult);
+    const analysis = await parseAnalysisResponse(analysisResult, apiKey);
 
     // Add analysis to paper
     const analyzedPaper = {
@@ -190,7 +190,15 @@ async function callLLM(prompt, model, params, apiKey) {
   }
 }
 
-function parseAnalysisResponse(response) {
+function normalizeCategory(category) {
+  if (!category || typeof category !== 'string') {
+    return 'machine_learning';
+  }
+  // Convert to lowercase, replace spaces with underscores, remove special characters
+  return category.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+}
+
+async function parseAnalysisResponse(response, apiKey) {
   try {
     // Clean the response to ensure it's valid JSON
     let cleanResponse = response.trim();
@@ -222,7 +230,11 @@ function parseAnalysisResponse(response) {
       }
     }
     
-    // Validate category
+    // Apply fallback translations if Chinese fields are empty but English content exists
+    await applyFallbackTranslations(parsed, apiKey);
+    
+    // Normalize and validate category
+    parsed.category = normalizeCategory(parsed.category);
     if (!TOPIC_CATEGORIES.includes(parsed.category)) {
       logger.warn(`Invalid category: ${parsed.category}, defaulting to 'machine_learning'`);
       parsed.category = 'machine_learning';
@@ -247,6 +259,68 @@ function parseAnalysisResponse(response) {
     logger.error('Failed to parse analysis response:', error);
     throw new AppError(`Failed to parse analysis: ${error.message}`);
   }
+}
+
+async function applyFallbackTranslations(analysis, apiKey) {
+  const translationPairs = [
+    { english: 'abstract', chinese: 'chinese_abstract', promptKey: 'abstract' },
+    { english: 'introduction', chinese: 'chinese_introduction', promptKey: 'introduction' },
+    { english: 'challenges', chinese: 'chinese_challenges', promptKey: 'challenges' },
+    { english: 'innovations', chinese: 'chinese_innovations', promptKey: 'innovations' },
+    { english: 'experiments', chinese: 'chinese_experiments', promptKey: 'experiments' },
+    { english: 'insights', chinese: 'chinese_insights', promptKey: 'insights' }
+  ];
+
+  const translationsNeeded = translationPairs.filter(pair => 
+    !analysis[pair.chinese] || analysis[pair.chinese].trim() === '' ||
+    analysis[pair.chinese].trim() === 'Not specified in the paper.'
+  );
+
+  if (translationsNeeded.length === 0) {
+    logger.debug('All Chinese translations are present, no fallback needed');
+    return;
+  }
+
+  logger.info(`Applying fallback translations for ${translationsNeeded.length} fields`);
+
+  for (const pair of translationsNeeded) {
+    const englishContent = analysis[pair.english];
+    
+    // Skip if English content is empty or "Not provided"
+    if (!englishContent || englishContent.trim() === '' || englishContent.trim() === 'Not provided') {
+      analysis[pair.chinese] = '英文内容不可用 / English content not available';
+      continue;
+    }
+
+    try {
+      const translationPrompt = `请将以下英文内容翻译成简体中文。翻译必须准确、自然，适合AI研究者和爱好者阅读。保持技术术语的专业性，但解释复杂概念时使用通俗易懂的语言。
+
+英文内容（${pair.promptKey}）：
+${englishContent}
+
+请只返回翻译后的中文文本，不要添加任何额外说明或格式。`;
+
+      const translatedContent = await callLLM(translationPrompt, MODEL_CONFIG.translation, MODEL_PARAMS.translation, apiKey);
+      
+      // Clean up the response
+      let cleanTranslation = translatedContent.trim();
+      if (cleanTranslation.startsWith('```')) {
+        cleanTranslation = cleanTranslation.replace(/```[\w]*\n?/, '').replace(/\n?```$/, '');
+      }
+      
+      analysis[pair.chinese] = cleanTranslation;
+      logger.debug(`Successfully translated ${pair.promptKey} to Chinese`);
+      
+      // Small delay to avoid rate limiting
+      await sleep(500);
+      
+    } catch (translationError) {
+      logger.warn(`Failed to translate ${pair.promptKey}:`, translationError.message);
+      analysis[pair.chinese] = `翻译失败，请查看英文原文 / Translation failed, please see English original`;
+    }
+  }
+
+  logger.info('Fallback translations completed');
 }
 
 function generateSummary(analysis) {

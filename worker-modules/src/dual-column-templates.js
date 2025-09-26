@@ -632,13 +632,23 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
 
                 // Use Chinese abstract if available, otherwise show original with Chinese label
                 if (paper.abstract) {
-                    html += '<h6>摘要</h6>';
-                    if (paper.analysis.chinese_abstract && paper.analysis.chinese_abstract.trim()) {
+                    html += '<h6>摘要 / Abstract</h6>';
+                    if (paper.analysis.chinese_abstract && paper.analysis.chinese_abstract.trim() && 
+                        paper.analysis.chinese_abstract !== '英文内容不可用 / English content not available' &&
+                        paper.analysis.chinese_abstract !== '翻译失败，请查看英文原文 / Translation failed, please see English original') {
                         html += '<p>' + paper.analysis.chinese_abstract + '</p>';
+                        html += '<div class="alert alert-info alert-sm mt-2 mb-0" role="alert">';
+                        html += '<i class="fas fa-info-circle me-1"></i>已提供中文翻译';
+                        html += '</div>';
                     } else {
                         html += '<p>' + paper.abstract + '</p>';
-                        html += '<p class="text-muted small"><em>注：摘要为英文原文</em></p>';
+                        html += '<div class="alert alert-warning alert-sm mt-2 mb-0" role="alert">';
+                        html += '<i class="fas fa-exclamation-triangle me-1"></i>摘要为英文原文，中文翻译生成中...';
+                        html += '</div>';
                     }
+                } else {
+                    html += '<h6>摘要 / Abstract</h6>';
+                    html += '<p class="text-muted">暂无摘要 / No abstract available</p>';
                 }
 
                 html += '<div class="mt-3">';
@@ -661,37 +671,109 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
             if (currentLanguage === 'zh' && paper.analysis) {
                 const analysis = paper.analysis;
                 let html = '';
+                let hasChineseContent = false;
+                let translationStatus = [];
 
-                if (analysis.chinese_introduction && analysis.chinese_introduction.trim()) {
-                    html += '<h6>介绍 / Introduction</h6>';
-                    html += '<p>' + analysis.chinese_introduction + '</p>';
-                } else if (analysis.introduction) {
-                    html += '<h6>介绍 / Introduction</h6>';
-                    html += '<p>' + analysis.introduction + '</p>';
+                // Check translation status
+                if (analysis.chinese_introduction && analysis.chinese_introduction.trim() && 
+                    analysis.chinese_introduction !== '英文内容不可用 / English content not available' &&
+                    analysis.chinese_introduction !== '翻译失败，请查看英文原文 / Translation failed, please see English original') {
+                    hasChineseContent = true;
+                }
+                if (analysis.chinese_innovations && analysis.chinese_innovations.trim() && 
+                    analysis.chinese_innovations !== '英文内容不可用 / English content not available' &&
+                    analysis.chinese_innovations !== '翻译失败，请查看英文原文 / Translation failed, please see English original') {
+                    hasChineseContent = true;
+                }
+                if (analysis.chinese_experiments && analysis.chinese_experiments.trim() && 
+                    analysis.chinese_experiments !== '英文内容不可用 / English content not available' &&
+                    analysis.chinese_experiments !== '翻译失败，请查看英文原文 / Translation failed, please see English original') {
+                    hasChineseContent = true;
+                }
+                if (analysis.chinese_insights && analysis.chinese_insights.trim() && 
+                    analysis.chinese_insights !== '英文内容不可用 / English content not available' &&
+                    analysis.chinese_insights !== '翻译失败，请查看英文原文 / Translation failed, please see English original') {
+                    hasChineseContent = true;
                 }
 
-                if (analysis.chinese_innovations && analysis.chinese_innovations.trim()) {
-                    html += '<h6>创新点 / Innovations</h6>';
-                    html += '<p>' + analysis.chinese_innovations + '</p>';
-                } else if (analysis.innovations) {
-                    html += '<h6>创新点 / Innovations</h6>';
-                    html += '<p>' + analysis.innovations + '</p>';
+                if (analysis.introduction) {
+                    if (analysis.chinese_introduction && analysis.chinese_introduction.trim()) {
+                        html += '<h6>介绍 / Introduction</h6>';
+                        html += '<p>' + analysis.chinese_introduction + '</p>';
+                        html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
+                        html += '<i class="fas fa-check-circle me-1"></i>中文翻译已完成';
+                        html += '</div>';
+                    } else {
+                        html += '<h6>介绍 / Introduction</h6>';
+                        html += '<p>' + analysis.introduction + '</p>';
+                        html += '<div class="alert alert-warning alert-sm mt-2 mb-3" role="alert">';
+                        html += '<i class="fas fa-spinner fa-spin me-1"></i>中文翻译生成中...';
+                        html += '</div>';
+                    }
                 }
 
-                if (analysis.chinese_experiments && analysis.chinese_experiments.trim()) {
-                    html += '<h6>实验与结果 / Experiments & Results</h6>';
-                    html += '<p>' + analysis.chinese_experiments + '</p>';
-                } else if (analysis.experiments) {
-                    html += '<h6>实验与结果 / Experiments & Results</h6>';
-                    html += '<p>' + analysis.experiments + '</p>';
+                if (analysis.challenges) {
+                    if (analysis.chinese_challenges && analysis.chinese_challenges.trim()) {
+                        html += '<h6>挑战 / Challenges</h6>';
+                        html += '<p>' + analysis.chinese_challenges + '</p>';
+                        html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
+                        html += '<i class="fas fa-check-circle me-1"></i>中文翻译已完成';
+                        html += '</div>';
+                    } else {
+                        html += '<h6>挑战 / Challenges</h6>';
+                        html += '<p>' + analysis.challenges + '</p>';
+                        html += '<div class="alert alert-warning alert-sm mt-2 mb-3" role="alert">';
+                        html += '<i class="fas fa-spinner fa-spin me-1"></i>中文翻译生成中...';
+                        html += '</div>';
+                    }
                 }
 
-                if (analysis.chinese_insights && analysis.chinese_insights.trim()) {
-                    html += '<h6>见解与未来方向 / Insights & Future Directions</h6>';
-                    html += '<p>' + analysis.chinese_insights + '</p>';
-                } else if (analysis.insights) {
-                    html += '<h6>见解与未来方向 / Insights & Future Directions</h6>';
-                    html += '<p>' + analysis.insights + '</p>';
+                if (analysis.innovations) {
+                    if (analysis.chinese_innovations && analysis.chinese_innovations.trim()) {
+                        html += '<h6>创新点 / Innovations</h6>';
+                        html += '<p>' + analysis.chinese_innovations + '</p>';
+                        html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
+                        html += '<i class="fas fa-check-circle me-1"></i>中文翻译已完成';
+                        html += '</div>';
+                    } else {
+                        html += '<h6>创新点 / Innovations</h6>';
+                        html += '<p>' + analysis.innovations + '</p>';
+                        html += '<div class="alert alert-warning alert-sm mt-2 mb-3" role="alert">';
+                        html += '<i class="fas fa-spinner fa-spin me-1"></i>中文翻译生成中...';
+                        html += '</div>';
+                    }
+                }
+
+                if (analysis.experiments) {
+                    if (analysis.chinese_experiments && analysis.chinese_experiments.trim()) {
+                        html += '<h6>实验与结果 / Experiments & Results</h6>';
+                        html += '<p>' + analysis.chinese_experiments + '</p>';
+                        html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
+                        html += '<i class="fas fa-check-circle me-1"></i>中文翻译已完成';
+                        html += '</div>';
+                    } else {
+                        html += '<h6>实验与结果 / Experiments & Results</h6>';
+                        html += '<p>' + analysis.experiments + '</p>';
+                        html += '<div class="alert alert-warning alert-sm mt-2 mb-3" role="alert">';
+                        html += '<i class="fas fa-spinner fa-spin me-1"></i>中文翻译生成中...';
+                        html += '</div>';
+                    }
+                }
+
+                if (analysis.insights) {
+                    if (analysis.chinese_insights && analysis.chinese_insights.trim()) {
+                        html += '<h6>见解与未来方向 / Insights & Future Directions</h6>';
+                        html += '<p>' + analysis.chinese_insights + '</p>';
+                        html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
+                        html += '<i class="fas fa-check-circle me-1"></i>中文翻译已完成';
+                        html += '</div>';
+                    } else {
+                        html += '<h6>见解与未来方向 / Insights & Future Directions</h6>';
+                        html += '<p>' + analysis.insights + '</p>';
+                        html += '<div class="alert alert-warning alert-sm mt-2 mb-3" role="alert">';
+                        html += '<i class="fas fa-spinner fa-spin me-1"></i>中文翻译生成中...';
+                        html += '</div>';
+                    }
                 }
 
                 if (analysis.keywords && analysis.keywords.length > 0) {
@@ -710,7 +792,20 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                     html += '</div>';
                 }
 
-                return html || '<p class="text-muted">暂无分析详情。</p>';
+                // Add overall translation status
+                if (hasChineseContent) {
+                    html += '<div class="mt-3 p-3 bg-success bg-opacity-10 border border-success rounded">';
+                    html += '<i class="fas fa-language text-success me-2"></i>';
+                    html += '<strong>翻译状态:</strong> 部分或全部内容已翻译为中文';
+                    html += '</div>';
+                } else {
+                    html += '<div class="mt-3 p-3 bg-warning bg-opacity-10 border border-warning rounded">';
+                    html += '<i class="fas fa-language text-warning me-2"></i>';
+                    html += '<strong>翻译状态:</strong> 正在生成中文翻译，请稍候刷新页面';
+                    html += '</div>';
+                }
+
+                return html || '<p class="text-muted">暂无分析详情 / No analysis details available.</p>';
             }
 
             // Default to English

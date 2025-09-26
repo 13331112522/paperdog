@@ -111,61 +111,64 @@ export const MODEL_PARAMS = {
 };
 
 // Paper analysis prompt template
-export const PAPER_ANALYSIS_PROMPT = `You are an expert AI researcher specializing in computer vision and machine learning. 
+export const PAPER_ANALYSIS_PROMPT = `You are an expert AI researcher specializing in related fields. 
 
-Analyze this research paper and provide a structured analysis:
+Generate 5 distinct text blocks in English. Use formatting suitable for Twitter (e.g., line breaks for readability, relevant emojis strategically).
+DO NOT MAKE ANYTHING UP. If the information is not in the paper, say "Not specified in the paper."
 
-**Paper Title:** {title}
-**Authors:** {authors}
-**Abstract:** {abstract}
-**Published:** {published}
+### Required Sections (Max 280 characters EACH):
 
-Please provide a comprehensive analysis covering:
+1. 🚀 Introduction (Hook & Core Idea):
+    * Start with a strong hook (question, surprising stat, relatable problem).
+    * Immediately state the paper's main breakthrough or purpose in simple, exciting terms.
+    * Briefly hint at *why* it's important or who it benefits.
+    * Goal: Make people stop scrolling and want to know more.
+    
+2. 🎯 Challenges (The Problems Solved):
+    * Clearly list 2-3 key problems or limitations this research tackles.
+    * Use bullet points (e.g., - Problem 1) or a numbered list for easy scanning.
+    * Be direct and focus on the *pain points* the paper addresses.
+    * Example: - Existing methods struggle with X. - Data scarcity hinders Y.
+	 
+3. ✨ Innovations (The Novel Solution):
+    * List the core method(s), model(s), or key techniques introduced.
+    * Use bullet points or a list.
+    * **Crucially, highlight *what makes it novel***. What's the unique twist or idea?
+    * Focus on the *how* in simple terms.
+    * Example: - Introduced CleverModel architecture. - Novel XYZ training technique.
+	 
+4. 📊 Experiment (Proof & Breakthrough):
+    * Showcase the single *most compelling* quantitative result (e.g., "Achieved X% improvement over state-of-the-art!").
+    * Clearly state the main breakthrough *demonstrated* by the experiments. What does this result *prove*?
+    * Provide concrete evidence of success concisely.
+    * Example: "Results: Our method outperformed prior work by 15% on [Benchmark Task], showing significant gains in [Metric]."
+	
+5. 🤔 Insights (What's Next?):
+    * **Synthesize, don't just copy.** List 1-2 *potential* future research directions *inspired* by this work but not necessarily listed in the paper's future work section.
+    * Suggest 1-2 *potential* broader applications or real-world implications.
+    * End with a forward-looking statement or question to spark discussion.
+    * Example: "Inspires exploration into [New Area]. Could this revolutionize [Application]? "
+     
 
-1. **Introduction & Background (50-100 words)**
-   - Research context and motivation
-   - Problem being addressed
-
-2. **Key Challenges (50-100 words)**
-   - Main technical challenges
-   - Limitations of existing approaches
-
-3. **Innovations & Contributions (100-150 words)**
-   - Novel methods or techniques
-   - Key technical contributions
-   - Theoretical or practical innovations
-
-4. **Experiments & Results (100-150 words)**
-   - Experimental setup
-   - Key results and metrics
-   - Comparison with baselines
-
-5. **Insights & Future Directions (50-100 words)**
-   - Implications for the field
-   - Potential applications
-   - Future research directions
-
-6. **Keywords (5-8 terms)**
-   - Extract key technical terms
-   - Include methods, datasets, metrics
+**IMPORTANT: You MUST provide complete Chinese translations for ALL sections. The Chinese translations should be accurate, natural, and suitable for Chinese-speaking AI researchers and enthusiasts. Use proper Simplified Chinese. Do not translate emojis or section numbers. Make sure each Chinese translation is comprehensive and covers the same key points as the English version.**
 
 **Format your response as a valid JSON object:**
 {
-  "introduction": "text...",
-  "challenges": "text...",
-  "innovations": "text...",
-  "experiments": "text...",
-  "insights": "text...",
+  "introduction": "🚀 English introduction text...",
+  "challenges": "🎯 English challenges text...(Use bullet points or a list with \\n for each)",
+  "innovations": "✨ English innovations text...(Use bullet points or a list with \\n for each)",
+  "experiments": "📊 English experiments text...",
+  "insights": "🤔 English insights text...",
   "keywords": ["term1", "term2", ...],
   "category": "one_of_topic_categories",
   "relevance_score": (1-10),
   "technical_depth": "beginner|intermediate|advanced",
-  "chinese_abstract": "Chinese translation of the paper's abstract",
-  "chinese_introduction": "中文介绍：研究背景和动机",
-  "chinese_challenges": "中文挑战：主要技术挑战",
-  "chinese_innovations": "中文创新：新方法和贡献",
-  "chinese_experiments": "中文实验：实验设置和结果",
-  "chinese_insights": "中文见解：领域意义和未来方向"
+  "chinese_abstract": "🚀中文摘要：完整的中文摘要，涵盖论文的主要贡献、创新点和背景。必须使用简体中文，确保翻译准确自然。",
+  "chinese_introduction": "🚀中文介绍：完整的中文介绍，包括研究背景、动机和核心思想。必须使用简体中文，确保翻译准确自然。",
+  "chinese_challenges": "🎯中文挑战：完整的中文挑战描述，列出主要技术问题。使用 bullet points 或列表。必须使用简体中文，确保翻译准确自然。",
+  "chinese_innovations": "✨中文创新：完整的中文创新描述，突出新方法和技术贡献。使用 bullet points 或列表。必须使用简体中文，确保翻译准确自然。",
+  "chinese_experiments": "📊中文实验：完整的中文实验描述，包括设置、结果和突破。必须使用简体中文，确保翻译准确自然。",
+  "chinese_insights": "🤔中文见解：完整的中文见解描述，包括领域意义和未来方向。必须使用简体中文，确保翻译准确自然。"
 }`;
 
 // RSS feed configuration

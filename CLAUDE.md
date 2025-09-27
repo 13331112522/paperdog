@@ -6,31 +6,37 @@ PaperDog is an AI-powered research paper aggregation system that automatically c
 ## Architecture
 - **Backend**: Cloudflare Workers (Serverless)
 - **Storage**: Cloudflare KV (Distributed Key-Value)
-- **AI Models**: OpenRouter API (GPT-4o, Gemini, Claude)
+- **AI Models**: OpenRouter API (GPT-5-mini, Gemini 2.5 Flash, DeepSeek V3.1)
 - **Frontend**: Server-side rendered HTML with Bootstrap 5
 - **Deployment**: Global CDN via Cloudflare
 
 ## Key Features
 
 ### 🧠 AI-Powered Analysis
-- **Intelligent Paper Analysis**: 500-word summaries using GPT-4o and Gemini
-- **Relevance Scoring**: 1-10 scale automatic scoring
-- **Technical Depth Assessment**: beginner/intermediate/advanced
-- **Smart Categorization**: Automated topic classification
-- **Chinese Translation**: Complete Chinese analysis including abstracts
+- **Multi-Model Analysis**: GPT-5-mini primary, Gemini 2.5 Flash Lite fallback
+- **5-Section Analysis**: Introduction, Challenges, Innovations, Experiments, Insights (280 chars each)
+- **Advanced Relevance Scoring**: Multi-factor scoring (Recency 30%, Relevance 40%, Popularity 20%, Quality 10%)
+- **Technical Depth Assessment**: beginner/intermediate/advanced classification
+- **Smart Categorization**: 11 predefined AI/ML categories with keyword matching
+- **Enhanced Chinese Translation**: Complete bilingual support with smart fallbacks
 
-### 📊 Smart Curation
+### 📊 Smart Curation & 5+5 Optimization
+- **Balanced Paper Sourcing**: 5 papers from arXiv + 5 papers from HuggingFace daily
+- **Smart Tie-Breaking**: Random selection for papers with identical scores
 - **Top 10 Daily**: Only highest-scoring papers archived daily
+- **Source Bonuses**: HuggingFace papers receive +2.0 bonus for exclusivity
 - **Date-Based Indexing**: Browse papers by specific dates
-- **Advanced Search**: Full-text search with filters
+- **Advanced Search**: Full-text search with multiple filters
 - **Export System**: JSON, CSV, Markdown, BibTeX formats
 - **RSS Feed**: Automated RSS generation
 
-### 👥 User Experience
+### 👥 Enhanced User Experience
+- **Complete Bilingual Interface**: Full Chinese/English translation system
+- **Visual Status Indicators**: Translation progress and status indicators
+- **Dual-Column Layout**: Papers list + detailed analysis view
+- **Real-time Language Toggle**: Seamless switching with preserved state
 - **Visitor Tracking**: Privacy-compliant visitor statistics
-- **Dual-Column Layout**: Papers list + detailed view
-- **Translation Toggle**: Chinese/English language switching
-- **Responsive Design**: Mobile-optimized interface
+- **Responsive Design**: Mobile-optimized with collapsible columns
 
 ## File Structure
 
@@ -89,14 +95,17 @@ ADMIN_TOKEN=your_admin_token_for_archive_creation
 ```
 
 ### Model Configuration
-- **Analysis Model**: `openai/gpt-4o-mini`
-- **Summary Model**: `google/gemini-2.0-flash-001`
-- **Translation Model**: `google/gemini-2.0-flash-001`
+- **Primary Analysis**: `openai/gpt-5-mini`
+- **Fallback Analysis**: `google/gemini-2.5-flash-lite-preview-09-2025`
+- **Summary Model**: `google/gemini-2.5-flash-preview-09-2025`
+- **Translation Model**: `deepseek/deepseek-v3.1-terminus`
 
-### Scoring System
-- **Relevance Score**: 1-10 scale
-- **Technical Depth**: beginner/intermediate/advanced
-- **Categories**: computer_vision, machine_learning, nlp, etc.
+### Advanced Scoring System
+- **Multi-Factor Scoring**: Recency (30%), Relevance (40%), Popularity (20%), Quality (10%)
+- **Source Bonuses**: HuggingFace papers receive +2.0 bonus
+- **Tie-Breaking**: Random selection for identical scores
+- **Score Range**: 1-10 scale with decimal precision
+- **Categories**: computer_vision, machine_learning, nlp, reinforcement_learning, multimodal, etc.
 
 ## Translation System
 
@@ -109,13 +118,22 @@ ADMIN_TOKEN=your_admin_token_for_archive_creation
 ### Translation Fields
 - `chinese_abstract`: Chinese translation of paper abstract
 - `chinese_introduction`: Chinese research background
+- `chinese_challenges`: Chinese technical challenges description
 - `chinese_innovations`: Chinese innovation description
 - `chinese_experiments`: Chinese experiment details
 - `chinese_insights`: Chinese insights and future directions
 
+### Translation Features
+- **Smart Fallback System**: Automatic translation of English content when missing
+- **Status Indicators**: Visual indicators showing translation progress
+- **Real-time Processing**: Dynamic translation updates
+- **Error Handling**: Graceful degradation for translation failures
+
 ## Archive System
 
 ### Storage Strategy
+- **5+5 Daily Optimization**: 5 papers from arXiv + 5 papers from HuggingFace
+- **Smart Selection**: Intelligent tie-breaking for papers with identical scores
 - **Top 10 Daily**: Only highest-scoring papers archived
 - **1-Year TTL**: Automatic cleanup of old archives
 - **Metadata Tracking**: Categories, sources, scores, dates
@@ -148,22 +166,26 @@ ADMIN_TOKEN=your_admin_token_for_archive_creation
 
 ## Recent Updates
 
-### Translation Enhancement (Latest)
-- **Complete Chinese Support**: Full bilingual interface
-- **Chinese Abstract Generation**: AI-generated Chinese abstracts
-- **Smart Fallback System**: Graceful degradation for missing translations
-- **Enhanced UI**: Visual language indicators and bilingual labels
+### Comprehensive System Enhancement (Latest)
+- **Enhanced Chinese Translation System**: Complete bilingual interface with smart fallbacks
+- **5+5 Optimization Algorithm**: Balanced paper sourcing from arXiv and HuggingFace
+- **Advanced Model Stack**: GPT-5-mini, Gemini 2.5 Flash Lite, DeepSeek V3.1 integration
+- **Multi-Factor Scoring**: Recency, relevance, popularity, quality-based scoring system
+- **API Reliability Enhancements**: Exponential backoff, multi-model fallbacks, improved error handling
+- **Smart Paper Selection**: Intelligent tie-breaking and source balancing
+- **Visual Status Indicators**: Translation progress and system status indicators
 
-### Archive System (Previous)
-- **Top 10 Limitation**: Enforced 10-paper daily limit
-- **Random Tie-Breaking**: Fair selection for identical scores
-- **Export Functionality**: Multiple format exports with filters
-- **Enhanced Navigation**: Archive and about page integration
+### Technical Improvements
+- **Performance Optimization**: Batch processing, parallel scraping, efficient caching
+- **Enhanced Error Recovery**: Multiple fallback mechanisms at each system level
+- **Improved User Interface**: Responsive design with collapsible columns
+- **Advanced Search**: Full-text search with comprehensive filters
+- **Real-time Updates**: Dynamic content loading without page refresh
 
-### Core Features (Initial)
-- **AI Analysis**: GPT-4o and Gemini integration
-- **Visitor Tracking**: Privacy-compliant visitor statistics
-- **Responsive Design**: Mobile-optimized interface
+### Previous Features
+- **Archive System**: Top 10 limitation, export functionality, date-based indexing
+- **Core AI Analysis**: Multi-section analysis with technical depth assessment
+- **Visitor Tracking**: Privacy-compliant statistics
 - **RSS Feed**: Automated content syndication
 
 ## Common Issues & Solutions
@@ -204,5 +226,5 @@ For issues, feature requests, or contributions, please refer to the project's Gi
 ---
 
 **Last Updated**: September 2025
-**Version**: 2.0 (Post-Translation Enhancement)
+**Version**: 3.0 (Post-Comprehensive Enhancement)
 **Status**: Production Ready ✅

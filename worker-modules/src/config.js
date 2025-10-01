@@ -89,10 +89,10 @@ export const SOURCE_CONFIGS = {
 
 // Model configuration for paper analysis
 export const MODEL_CONFIG = {
-  analysis: 'openai/gpt-4o-mini',
-  fallback_analysis: 'google/gemini-2.0-flash-001',
-  summary: 'google/gemini-2.0-flash-001',
-  translation: 'google/gemini-2.0-flash-001'
+  analysis: 'openai/gpt-5-mini',
+  fallback_analysis: 'google/gemini-2.5-flash-preview-09-2025',
+  summary: 'x-ai/grok-4-fast',
+  translation: 'google/gemini-2.5-flash-preview-09-2025'
 };
 
 export const MODEL_PARAMS = {
@@ -112,6 +112,13 @@ export const MODEL_PARAMS = {
 
 // Paper analysis prompt template
 export const PAPER_ANALYSIS_PROMPT = `You are an expert AI researcher specializing in related fields. 
+
+Analyze this research paper and provide a structured analysis:
+
+**Paper Title:** {title}
+**Authors:** {authors}
+**Abstract:** {abstract}
+**Published:** {published}
 
 Generate 5 distinct text blocks in English. Use formatting suitable for Twitter (e.g., line breaks for readability, relevant emojis strategically).
 DO NOT MAKE ANYTHING UP. If the information is not in the paper, say "Not specified in the paper."

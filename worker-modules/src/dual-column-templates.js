@@ -209,6 +209,34 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
             font-size: 0.8rem;
             color: #6c757d;
         }
+
+        .view-count {
+            font-size: 0.75rem;
+            color: #6c757d;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            background: rgba(0, 123, 255, 0.05);
+            padding: 0.125rem 0.375rem;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 123, 255, 0.1);
+        }
+
+        .view-count i {
+            font-size: 0.8rem;
+            color: #007bff;
+        }
+
+        .view-badge {
+            background: rgba(0, 123, 255, 0.1);
+            color: #007bff;
+            padding: 0.125rem 0.375rem;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 500;
+            min-width: 20px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -308,7 +336,7 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
             // Initialize with today's papers if available
             if (report && report.papers && report.papers.length > 0) {
                 loadPapersList(report.papers);
-                
+
                 // Auto-select the top paper
                 if (report.top_papers && report.top_papers.length > 0) {
                     loadPaperContent(report.top_papers[0]);
@@ -387,13 +415,21 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                 const totalScore = (paper.scoring && paper.scoring.total_score) || (paper.analysis && paper.analysis.relevance_score) || 5;
                 const category = (paper.analysis && paper.analysis.category) || paper.category || 'other';
                 const isTopPaper = totalScore >= 7.0;
-                
+                const views = paper.views || 0;
+                const viewDisplay = views > 999 ? (views / 1000).toFixed(1) + 'k' : views.toString();
+
                 return '<div class="card paper-card mb-2" onclick="loadPaperContent(' + index + ')">' +
                     '<div class="card-body py-2 px-3">' +
-                    '<h6 class="card-title mb-1">' +
+                    '<div class="d-flex justify-content-between align-items-start mb-2">' +
+                    '<h6 class="card-title mb-0 flex-grow-1">' +
                     (isTopPaper ? '<i class="fas fa-trophy text-warning me-1"></i>' : '') +
                     paper.title.substring(0, 60) + (paper.title.length > 60 ? '...' : '') +
                     '</h6>' +
+                    '<div class="view-count">' +
+                    '<i class="fas fa-eye"></i>' +
+                    '<span class="view-badge">' + viewDisplay + '</span>' +
+                    '</div>' +
+                    '</div>' +
                     '<p class="paper-abstract mb-1">' + (paper.abstract || 'No abstract').substring(0, 80) + '...</p>' +
                     '<div class="d-flex justify-content-between align-items-center">' +
                     '<div>' +
@@ -565,6 +601,42 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                 }, 2000);
             } finally {
                 loadingIndicator.style.display = 'none';
+            }
+        }
+
+        // View tracking functions
+        async function trackPaperView(paperId) {
+            try {
+                const response = await fetch('/api/papers/' + paperId + '/view', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+
+                    // Update view count in UI
+                    const papers = window.currentPapers;
+                    const paperIndex = papers.findIndex(p => p.id === paperId);
+                    if (paperIndex !== -1) {
+                        papers[paperIndex].views = result.views;
+                        updateViewDisplay(paperIndex, result.views);
+                    }
+                }
+            } catch (error) {
+                console.warn('Failed to track view:', error);
+                // Silent fail - don't break user experience
+            }
+        }
+
+        function updateViewDisplay(paperIndex, viewCount) {
+            const cards = document.querySelectorAll('.paper-card');
+            const viewCountElement = cards[paperIndex].querySelector('.view-badge');
+            if (viewCountElement) {
+                const displayCount = viewCount > 999 ? (viewCount / 1000).toFixed(1) + 'k' : viewCount.toString();
+                viewCountElement.textContent = displayCount;
             }
         }
 
@@ -820,6 +892,11 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
             if (!paper) return;
 
             window.currentPaperIndex = index;
+
+            // Track view when paper is selected
+            if (paper.id) {
+                trackPaperView(paper.id);
+            }
 
             // Load paper details with translation
             const paperContent = generateTranslatedPaperDetails(paper);

@@ -1,5 +1,5 @@
 import { AppError, TOPIC_CATEGORIES } from './config.js';
-import { validateDate, generatePaperId, sortPapersByDate } from './utils.js';
+import { validateDate, generatePaperId, sortPapersByDate, enrichPapersWithViews } from './utils.js';
 
 const logger = {
   info: (msg, data = {}) => console.log(`[ARCHIVE] ${msg}`, data),
@@ -56,9 +56,11 @@ function createArchiveEntry(date, papers, metadata = {}) {
       primary_category: paper.primary_category,
       analysis: paper.analysis,
       scraped_at: paper.scraped_at,
+      views: paper.views || 0, // Include view count
       archive_metadata: {
         archived_at: new Date().toISOString(),
-        original_id: paper.id
+        original_id: paper.id,
+        views_at_archive: paper.views || 0 // Track views at time of archiving
       }
     })),
     metadata: {
@@ -67,6 +69,7 @@ function createArchiveEntry(date, papers, metadata = {}) {
       sources,
       average_score: Math.round(avgScore * 10) / 10,
       unique_keywords: Array.from(keywords).slice(0, 50),
+      total_views: papers.reduce((sum, paper) => sum + (paper.views || 0), 0), // Total views for all papers
       created_at: new Date().toISOString(),
       ...metadata
     }
@@ -136,8 +139,11 @@ export async function archivePapers(date, papers, env, metadata = {}) {
 
     logger.info(`Archiving ${papers.length} papers for date ${date}`);
 
+    // Enrich papers with view counts before archiving
+    const papersWithViews = await enrichPapersWithViews(papers, env);
+
     // Create archive entry
-    const archiveEntry = createArchiveEntry(date, papers, metadata);
+    const archiveEntry = createArchiveEntry(date, papersWithViews, metadata);
 
     // Store archive entry with long TTL (1 year)
     await env.PAPERS.put(ARCHIVE_KEYS.daily(date), JSON.stringify(archiveEntry), {

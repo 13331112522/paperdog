@@ -149,6 +149,23 @@ export function generateEnhancedArchiveHTML(data) {
             font-weight: 600;
         }
 
+        .view-count {
+            background: rgba(0, 123, 255, 0.1);
+            color: #007bff;
+            border-radius: 12px;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            border: 1px solid rgba(0, 123, 255, 0.2);
+        }
+
+        .view-count i {
+            font-size: 0.7rem;
+        }
+
         .category-badge {
             background: #e3f2fd;
             color: #1976d2;
@@ -369,7 +386,13 @@ export function generateEnhancedArchiveHTML(data) {
                                         ${paper.title}
                                     </a>
                                 </h5>
-                                <span class="score-badge">${(paper.analysis?.relevance_score || 5).toFixed(1)}/10</span>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="view-count">
+                                        <i class="fas fa-eye"></i>
+                                        <span>${paper.views || 0}</span>
+                                    </div>
+                                    <span class="score-badge">${(paper.analysis?.relevance_score || 5).toFixed(1)}/10</span>
+                                </div>
                             </div>
                             <p class="text-muted mb-2">
                                 <i class="fas fa-user me-1"></i>${paper.authors?.join(', ') || 'Unknown authors'}

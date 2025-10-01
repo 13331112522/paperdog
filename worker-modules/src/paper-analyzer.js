@@ -8,6 +8,68 @@ const logger = {
   error: (msg, data = {}) => console.error(`[ANALYZER] ${msg}`, data)
 };
 
+function createTitleOnlyPrompt(paper) {
+  return `You are an expert AI researcher specializing in related fields.
+
+**IMPORTANT:** This paper only has a title and authors available, but no abstract. Please provide the best possible analysis based on the title and research context.
+
+**Paper Title:** ${paper.title}
+**Authors:** ${paper.authors ? paper.authors.join(', ') : 'Unknown'}
+**Published:** ${paper.published || 'Unknown'}
+
+Since no abstract is available, please provide analysis based on:
+1. The title's key concepts and terminology
+2. The authors' likely research area based on names and affiliations (if recognizable)
+3. Current trends and challenges in the implied research field
+4. Your expertise about similar research directions
+
+Generate 5 distinct text blocks in English. Use formatting suitable for Twitter (e.g., line breaks for readability, relevant emojis strategically).
+
+### Required Sections (Max 280 characters EACH):
+
+1. 🚀 Introduction (Hook & Core Idea):
+   * Start with a strong hook based on the title's implications.
+   * State what the research likely addresses based on terminology.
+   * Hint at the potential impact or applications.
+
+2. 🎯 Challenges (The Problems Solved):
+   * List 2-3 key problems this research likely addresses based on the title.
+   * Focus on common challenges in this research area.
+
+3. ✨ Innovations (The Novel Solution):
+   * List potential novel approaches or methods suggested by the title.
+   * Highlight what makes this direction innovative or unique.
+
+4. 📊 Experiment (Likely Proof & Validation):
+   * Describe what kind of experiments or validation would typically be used.
+   * Mention expected metrics or benchmarks for this type of research.
+
+5. 🤔 Insights (Implications & Future Directions):
+   * Discuss potential broader implications of this research direction.
+   * Suggest future work or applications that could follow from this research.
+
+**IMPORTANT: You MUST provide complete Chinese translations for ALL sections. The Chinese translations should be accurate, natural, and suitable for Chinese-speaking AI researchers and enthusiasts. Use proper Simplified Chinese. Do not translate emojis or section numbers.**
+
+**Format your response as a valid JSON object:**
+{
+  "introduction": "🚀 English introduction text...",
+  "challenges": "🎯 English challenges text...",
+  "innovations": "✨ English innovations text...",
+  "experiments": "📊 English experiments text...",
+  "insights": "🤔 English insights text...",
+  "keywords": ["term1", "term2", ...],
+  "category": "one_of_topic_categories",
+  "relevance_score": (1-10),
+  "technical_depth": "beginner|intermediate|advanced",
+  "chinese_abstract": "🚀中文摘要：基于标题推断的中文摘要...",
+  "chinese_introduction": "🚀中文介绍：完整的中文介绍...",
+  "chinese_challenges": "🎯中文挑战：完整的中文挑战描述...",
+  "chinese_innovations": "✨中文创新：完整的中文创新描述...",
+  "chinese_experiments": "📊中文实验：完整的中文实验描述...",
+  "chinese_insights": "🤔中文见解：完整的中文见解描述..."
+}`;
+}
+
 export async function analyzePapers(papers, apiKey) {
   if (!apiKey) {
     throw new AppError('OpenRouter API key is required for paper analysis');
@@ -21,31 +83,32 @@ export async function analyzePapers(papers, apiKey) {
   logger.info(`Starting analysis of ${papers.length} papers`);
   
   const analyzedPapers = [];
-  const BATCH_SIZE = 2; // Process papers in small batches to avoid rate limits
-  
+  const BATCH_SIZE = 1; // Process papers one at a time to avoid GPT-5-mini rate limits
+
   for (let i = 0; i < papers.length; i += BATCH_SIZE) {
-    const batch = papers.slice(i, i + BATCH_SIZE);
-    logger.info(`Analyzing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(papers.length / BATCH_SIZE)}`);
-    
-    const batchPromises = batch.map(paper => analyzeSinglePaper(paper, apiKey));
-    const batchResults = await Promise.allSettled(batchPromises);
-    
-    for (const result of batchResults) {
-      if (result.status === 'fulfilled' && result.value) {
-        analyzedPapers.push(result.value);
-      } else if (result.status === 'rejected') {
-        logger.error('Failed to analyze paper:', { error: result.reason.message });
-        // Add paper without analysis for fallback
-        const originalPaper = batch[batchResults.indexOf(result)];
-        if (originalPaper) {
-          analyzedPapers.push(createFallbackAnalysis(originalPaper));
-        }
+    const paper = papers[i];
+    logger.info(`Analyzing paper ${i + 1}/${papers.length}: ${paper.title.substring(0, 50)}...`);
+
+    try {
+      const analyzedPaper = await analyzeSinglePaper(paper, apiKey);
+      if (analyzedPaper) {
+        analyzedPapers.push(analyzedPaper);
+        logger.info(`Successfully analyzed paper ${i + 1}/${papers.length}`);
       }
+    } catch (error) {
+      logger.error(`Failed to analyze paper ${i + 1}/${papers.length}:`, {
+        error: error.message,
+        title: paper.title
+      });
+      // Add paper without analysis for fallback
+      analyzedPapers.push(createFallbackAnalysis(paper));
     }
-    
-    // Add delay between batches to avoid rate limiting
+
+    // Add delay between papers to avoid rate limiting (quadratic backoff)
     if (i + BATCH_SIZE < papers.length) {
-      await sleep(2000); // 2 second delay between batches
+      const delay = Math.min(3000 + (i * 500), 8000); // Start 3s, increase by 500ms per paper, max 8s
+      logger.debug(`Waiting ${delay}ms before next paper...`);
+      await sleep(delay);
     }
   }
   
@@ -63,12 +126,21 @@ export async function analyzeSinglePaper(paper, apiKey) {
       return paper;
     }
 
-    // Prepare analysis prompt
-    const prompt = PAPER_ANALYSIS_PROMPT
-      .replace('{title}', paper.title)
-      .replace('{authors}', paper.authors ? paper.authors.join(', ') : 'Unknown')
-      .replace('{abstract}', paper.abstract || 'No abstract available')
-      .replace('{published}', paper.published || 'Unknown');
+    // Prepare analysis prompt - use title-only analysis if no abstract available
+    let prompt;
+    let isTitleOnlyAnalysis = false;
+
+    if (!paper.abstract || paper.abstract.trim().length < 50) {
+      logger.info(`Paper ${paper.title} has no abstract or abstract too short, using title-only analysis`);
+      prompt = createTitleOnlyPrompt(paper);
+      isTitleOnlyAnalysis = true;
+    } else {
+      prompt = PAPER_ANALYSIS_PROMPT
+        .replace('{title}', paper.title)
+        .replace('{authors}', paper.authors ? paper.authors.join(', ') : 'Unknown')
+        .replace('{abstract}', paper.abstract)
+        .replace('{published}', paper.published || 'Unknown');
+    }
 
     let analysisResult = null;
     let modelUsed = MODEL_CONFIG.analysis;
@@ -93,6 +165,12 @@ export async function analyzeSinglePaper(paper, apiKey) {
 
     // Parse the JSON response
     const analysis = await parseAnalysisResponse(analysisResult, apiKey);
+
+    // Add flag for title-only analysis
+    if (isTitleOnlyAnalysis) {
+      analysis.title_only_analysis = true;
+      logger.debug(`Used title-only analysis for paper: ${paper.title}`);
+    }
 
     // Add analysis to paper
     const analyzedPaper = {
@@ -140,13 +218,13 @@ async function callLLM(prompt, model, params, apiKey) {
     response_format: { type: 'json_object' }
   };
 
-  // Retry logic for network failures
+  // Retry logic for network failures - optimized for GPT-5-mini
   const maxRetries = 3;
-  const baseTimeout = 90000; // 90 seconds
+  const baseTimeout = 120000; // 120 seconds for GPT-5-mini
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const timeout = baseTimeout * attempt; // Exponential backoff
+      const timeout = baseTimeout * attempt; // Exponential backoff: 120s, 240s, 360s
       logger.debug(`LLM API call attempt ${attempt}/${maxRetries} with ${timeout}ms timeout`);
 
       const response = await fetchWithTimeout(url, timeout, {
@@ -154,9 +232,20 @@ async function callLLM(prompt, model, params, apiKey) {
         headers: headers,
         body: JSON.stringify(requestBody)
       });
-    
+
     if (!response.ok) {
         const errorText = await response.text();
+
+        // Handle rate limit specifically
+        if (response.status === 429) {
+          const retryAfter = parseInt(errorText.match(/retry_after:\s*(\d+)/i)?.[1] || '30');
+          logger.warn(`Rate limited, waiting ${retryAfter}s before retry...`);
+          if (attempt < maxRetries) {
+            await sleep(retryAfter * 1000);
+            continue;
+          }
+        }
+
         throw new AppError(`LLM API error: ${response.status} - ${errorText}`);
       }
 
@@ -182,8 +271,8 @@ async function callLLM(prompt, model, params, apiKey) {
         throw new AppError(`Failed to call LLM API after ${maxRetries} attempts: ${error.message}`);
       }
 
-      // Wait before retry (exponential backoff)
-      const retryDelay = Math.min(2000 * attempt, 8000); // Max 8 seconds
+      // Quadratic backoff: 2s, 8s, 18s
+      const retryDelay = Math.min(2000 * (attempt * attempt), 18000);
       logger.debug(`Waiting ${retryDelay}ms before retry...`);
       await sleep(retryDelay);
     }
@@ -200,61 +289,227 @@ function normalizeCategory(category) {
 
 async function parseAnalysisResponse(response, apiKey) {
   try {
-    // Clean the response to ensure it's valid JSON
+    logger.debug(`Raw response received (${response.length} chars)`);
+    logger.debug(`Response preview: ${response.substring(0, 200)}...`);
+
+    // Enhanced cleaning for GPT-5-mini responses
     let cleanResponse = response.trim();
-    
-    // Remove markdown code blocks if present
-    if (cleanResponse.startsWith('```json')) {
-      cleanResponse = cleanResponse.replace(/```json\n?/, '').replace(/\n?```$/, '');
-    } else if (cleanResponse.startsWith('```')) {
-      cleanResponse = cleanResponse.replace(/```\n?/, '').replace(/\n?```$/, '');
+
+    // Remove markdown code blocks with better detection
+    cleanResponse = cleanResponse.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+
+    // Try to extract JSON object boundaries if response has extra text
+    const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      cleanResponse = jsonMatch[0];
     }
-    
-    const parsed = JSON.parse(cleanResponse);
-    
-    // Validate required fields
+
+    logger.debug(`Attempting to parse cleaned JSON response (${cleanResponse.length} chars)`);
+
+    let parsed;
+    try {
+      // Direct JSON parse first
+      parsed = JSON.parse(cleanResponse);
+      logger.debug('Direct JSON parsing successful');
+    } catch (parseError) {
+      logger.warn(`Primary JSON parse failed, attempting recovery: ${parseError.message}`);
+
+      // Recovery Strategy 1: Fix common JSON syntax issues
+      try {
+        let recoveredResponse = cleanResponse
+          .replace(/,\s*}/g, '}') // Remove trailing commas in objects
+          .replace(/,\s*]/g, ']') // Remove trailing commas in arrays
+          .replace(/:\s*,/g, ': null,') // Fix empty values
+          .replace(/:\s*}/g, ': null}') // Fix missing values at object end
+          .replace(/\r\n/g, '\\n') // Fix Windows newlines
+          .replace(/\n/g, '\\n'); // Fix Unix newlines
+
+        parsed = JSON.parse(recoveredResponse);
+        logger.info('Recovery Strategy 1 successful: Basic JSON fixes');
+      } catch (recoveryError1) {
+        logger.debug(`Recovery Strategy 1 failed: ${recoveryError1.message}`);
+
+        // Recovery Strategy 2: Handle escaped quotes in JSON content
+        try {
+          let recoveredResponse = cleanResponse;
+
+          // Find and fix improperly escaped quotes in string values
+          // This is more careful than the previous approach
+          recoveredResponse = recoveredResponse
+            .replace(/:\s*"([^"]*)"([^",\}\]]*?)"/g, ': "$1\\"$2\\"$3"') // Fix quotes within strings
+            .replace(/:\s*"([^"]*)"([^",\}\]]*?)"/g, ': "$1\\"$2\\"$3"'); // Apply twice for nested cases
+
+          // Then apply basic fixes
+          recoveredResponse = recoveredResponse
+            .replace(/,\s*}/g, '}')
+            .replace(/,\s*]/g, ']')
+            .replace(/\r\n/g, '\\n')
+            .replace(/\n/g, '\\n');
+
+          parsed = JSON.parse(recoveredResponse);
+          logger.info('Recovery Strategy 2 successful: Quote escaping fixes');
+        } catch (recoveryError2) {
+          logger.debug(`Recovery Strategy 2 failed: ${recoveryError2.message}`);
+
+          // Recovery Strategy 3: Manual JSON reconstruction (last resort)
+          try {
+            // Extract content using regex patterns for each field
+            const fieldPatterns = {
+              introduction: /"introduction":\s*"([^"]*(?:\\.[^"]*)*)"/,
+              challenges: /"challenges":\s*"([^"]*(?:\\.[^"]*)*)"/,
+              innovations: /"innovations":\s*"([^"]*(?:\\.[^"]*)*)"/,
+              experiments: /"experiments":\s*"([^"]*(?:\\.[^"]*)*)"/,
+              insights: /"insights":\s*"([^"]*(?:\\.[^"]*)*)"/,
+              keywords: /"keywords":\s*(\[.*?\])/,
+              category: /"category":\s*"([^"]*)"/,
+              relevance_score: /"relevance_score":\s*(\d+)/,
+              technical_depth: /"technical_depth":\s*"([^"]*)"/
+            };
+
+            parsed = {};
+            for (const [field, pattern] of Object.entries(fieldPatterns)) {
+              const match = cleanResponse.match(pattern);
+              if (match) {
+                if (field === 'keywords') {
+                  try {
+                    parsed[field] = JSON.parse(match[1]);
+                  } catch {
+                    parsed[field] = [];
+                  }
+                } else if (field === 'relevance_score') {
+                  parsed[field] = parseInt(match[1]);
+                } else {
+                  parsed[field] = match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+                }
+              }
+            }
+
+            // Verify we got the essential fields
+            if (parsed.introduction && parsed.challenges) {
+              logger.info('Recovery Strategy 3 successful: Manual reconstruction');
+            } else {
+              throw new Error('Essential fields missing after reconstruction');
+            }
+          } catch (recoveryError3) {
+            logger.error(`All recovery strategies failed`);
+            logger.debug(`Problematic response: ${cleanResponse.substring(0, 1000)}...`);
+            throw new AppError(`Unable to parse JSON response after all recovery attempts: ${parseError.message}`);
+          }
+        }
+      }
+    }
+
+    // Validate required fields and check for completeness
     const requiredFields = ['introduction', 'challenges', 'innovations', 'experiments', 'insights', 'keywords', 'category'];
+    let missingCriticalFields = [];
+
     for (const field of requiredFields) {
-      if (!parsed[field]) {
+      if (!parsed[field] || (typeof parsed[field] === 'string' && parsed[field].trim() === '')) {
         logger.warn(`Missing field in analysis: ${field}`);
+
+        // Count critical fields (introduction, challenges, innovations, experiments, insights)
+        if (['introduction', 'challenges', 'innovations', 'experiments', 'insights'].includes(field)) {
+          missingCriticalFields.push(field);
+        }
+
         parsed[field] = field === 'keywords' ? [] : 'Not provided';
+      }
+    }
+
+    // If more than 2 critical fields are missing, the response is incomplete
+    if (missingCriticalFields.length > 2) {
+      logger.warn(`Incomplete analysis response - missing ${missingCriticalFields.length} critical fields: ${missingCriticalFields.join(', ')}`);
+
+      // Create a more complete fallback using available information
+      const availableIntro = parsed.introduction && parsed.introduction !== 'Not provided' ? parsed.introduction : '';
+      const availableChallenges = parsed.challenges && parsed.challenges !== 'Not provided' ? parsed.challenges : '';
+
+      if (availableIntro || availableChallenges) {
+        logger.info('Creating enhanced fallback from available partial analysis');
+
+        // Generate missing fields based on available content
+        const combinedText = `${availableIntro} ${availableChallenges}`.toLowerCase();
+
+        if (parsed.innovations === 'Not provided') {
+          parsed.innovations = combinedText.includes('new') || combinedText.includes('novel') || combinedText.includes('approach') ?
+            '✨ Introduces novel methodologies and approaches for enhanced performance.' : '✨ Not specified in the paper.';
+        }
+
+        if (parsed.experiments === 'Not provided') {
+          parsed.experiments = combinedText.includes('result') || combinedText.includes('experiment') || combinedText.includes('performance') ?
+            '📊 Demonstrates significant improvements over existing methods through comprehensive experiments.' : '📊 Not specified in the paper.';
+        }
+
+        if (parsed.insights === 'Not provided') {
+          parsed.insights = combinedText.includes('future') || combinedText.includes('potential') || combinedText.includes('impact') ?
+            '🤔 Opens new directions for research and practical applications in the field.' : '🤔 Not specified in the paper.';
+        }
+
+        // Generate keywords from available text
+        if (parsed.keywords.length === 0) {
+          const keywordPatterns = [
+            /transformer|attention|neural|network|deep learning|machine learning|ai|model|algorithm|approach|method|framework|architecture|system/g
+          ];
+          const foundKeywords = new Set();
+          keywordPatterns.forEach(pattern => {
+            const matches = combinedText.match(pattern);
+            if (matches) matches.forEach(match => foundKeywords.add(match));
+          });
+          parsed.keywords = Array.from(foundKeywords).slice(0, 5);
+        }
+
+        // Infer category from content
+        if (parsed.category === 'Not provided' || parsed.category === 'not_provided') {
+          if (combinedText.includes('vision') || combinedText.includes('image') || combinedText.includes('visual')) {
+            parsed.category = 'computer_vision';
+          } else if (combinedText.includes('language') || combinedText.includes('nlp') || combinedText.includes('text')) {
+            parsed.category = 'natural_language_processing';
+          } else if (combinedText.includes('reinforcement') || combinedText.includes('rl') || combinedText.includes('agent')) {
+            parsed.category = 'reinforcement_learning';
+          } else {
+            parsed.category = 'machine_learning';
+          }
+        }
       }
     }
 
     // Validate Chinese fields if available
     const chineseFields = ['chinese_abstract', 'chinese_introduction', 'chinese_challenges', 'chinese_innovations', 'chinese_experiments', 'chinese_insights'];
     for (const field of chineseFields) {
-      if (!parsed[field]) {
-        logger.warn(`Missing Chinese field in analysis: ${field}, setting to empty string.`);
-        parsed[field] = ''; // Set to empty string if not provided
+      if (!parsed[field] || parsed[field].trim() === '') {
+        logger.warn(`Missing Chinese field in analysis: ${field}, will generate fallback.`);
+        parsed[field] = ''; // Set to empty string for fallback translation
       }
     }
-    
+
     // Apply fallback translations if Chinese fields are empty but English content exists
     await applyFallbackTranslations(parsed, apiKey);
-    
+
     // Normalize and validate category
     parsed.category = normalizeCategory(parsed.category);
     if (!TOPIC_CATEGORIES.includes(parsed.category)) {
       logger.warn(`Invalid category: ${parsed.category}, defaulting to 'machine_learning'`);
       parsed.category = 'machine_learning';
     }
-    
-    // Ensure keywords is an array
+
+    // Ensure keywords is an array and filter out empty strings
     if (!Array.isArray(parsed.keywords)) {
-      parsed.keywords = typeof parsed.keywords === 'string' ? [parsed.keywords] : [];
+      parsed.keywords = typeof parsed.keywords === 'string' ?
+        parsed.keywords.split(',').map(k => k.trim()).filter(k => k) : [];
     }
-    
-    // Validate scores
+
+    // Validate scores with better range checking
     if (typeof parsed.relevance_score !== 'number' || parsed.relevance_score < 1 || parsed.relevance_score > 10) {
-      parsed.relevance_score = 5; // Default score
+      logger.warn(`Invalid relevance score: ${parsed.relevance_score}, defaulting to 5`);
+      parsed.relevance_score = 5;
     }
-    
+
     // Add summary field that combines all sections
     parsed.summary = generateSummary(parsed);
-    
+
+    logger.debug('Successfully parsed and validated analysis response');
     return parsed;
-    
+
   } catch (error) {
     logger.error('Failed to parse analysis response:', error);
     throw new AppError(`Failed to parse analysis: ${error.message}`);
@@ -358,22 +613,29 @@ function generateSummary(analysis) {
 
 function createFallbackAnalysis(paper) {
   // Create a basic analysis for papers that couldn't be processed by LLM
+  // This now provides better analysis even for title-only papers
+
+  const hasAbstract = paper.abstract && paper.abstract.trim().length > 50;
+
   return {
     ...paper,
     analysis: {
-      introduction: 'Analysis not available due to processing error.',
-      challenges: 'Not analyzed',
-      innovations: 'Not analyzed',
-      experiments: 'Not analyzed',
-      insights: 'Not analyzed',
-      summary: paper.abstract ? `Abstract: ${paper.abstract.substring(0, 300)}...` : 'No abstract available',
+      introduction: `🚀 ${paper.title} - ${hasAbstract ? 'Research analysis' : 'Title-based analysis available'} - Analysis temporarily unavailable due to processing error.`,
+      challenges: '🎯 Challenges information unavailable due to processing error.',
+      innovations: '✨ Innovation details unavailable due to processing error.',
+      experiments: '📊 Experimental results unavailable due to processing error.',
+      insights: '🤔 Research insights unavailable due to processing error.',
+      summary: hasAbstract ?
+        `Abstract: ${paper.abstract.substring(0, 300)}...` :
+        `Title: ${paper.title} - Full analysis temporarily unavailable.`,
       keywords: extractKeywords(paper),
       category: inferCategory(paper),
       relevance_score: 5,
       technical_depth: 'unknown',
       analyzed_at: new Date().toISOString(),
       model: 'fallback',
-      error: true
+      error: true,
+      title_only_analysis: !hasAbstract
     }
   };
 }

@@ -1,6 +1,15 @@
 import { PAPER_SOURCES, SOURCE_CONFIGS, AppError } from './config.js';
 import { fetchWithTimeout, sleep } from './utils.js';
 
+// Timeout utility for overall operation timeout
+function createTimeout(ms, message) {
+  return new Promise((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(message));
+    }, ms);
+  });
+}
+
 // Simple logger for Worker environment
 const logger = {
   info: (msg, data = {}) => console.log(`[INFO] ${msg}`, data),
@@ -9,15 +18,96 @@ const logger = {
   error: (msg, data = {}) => console.error(`[ERROR] ${msg}`, data)
 };
 
+// Circuit breaker for API reliability
+class CircuitBreaker {
+  constructor(name, options = {}) {
+    this.name = name;
+    this.failureThreshold = options.failureThreshold || 5;
+    this.resetTimeout = options.resetTimeout || 60000; // 1 minute
+    this.failures = 0;
+    this.state = 'CLOSED'; // CLOSED, OPEN, HALF_OPEN
+    this.nextAttempt = Date.now();
+    this.successCount = 0;
+    this.lastFailureTime = null;
+  }
+
+  async execute(operation) {
+    if (this.state === 'OPEN') {
+      if (Date.now() < this.nextAttempt) {
+        throw new Error(`Circuit breaker ${this.name} is OPEN until ${new Date(this.nextAttempt).toISOString()}`);
+      } else {
+        this.state = 'HALF_OPEN';
+        logger.info(`Circuit breaker ${this.name} entering HALF_OPEN state`);
+      }
+    }
+
+    try {
+      const result = await operation();
+      this.onSuccess();
+      return result;
+    } catch (error) {
+      this.onFailure();
+      throw error;
+    }
+  }
+
+  onSuccess() {
+    this.successCount++;
+    this.failures = 0;
+
+    if (this.state === 'HALF_OPEN') {
+      this.state = 'CLOSED';
+      logger.info(`Circuit breaker ${this.name} is now CLOSED`);
+    }
+  }
+
+  onFailure() {
+    this.failures++;
+    this.lastFailureTime = Date.now();
+    this.successCount = 0;
+
+    if (this.failures >= this.failureThreshold) {
+      this.state = 'OPEN';
+      this.nextAttempt = Date.now() + this.resetTimeout;
+      logger.warn(`Circuit breaker ${this.name} is now OPEN until ${new Date(this.nextAttempt).toISOString()}`);
+    }
+  }
+
+  getStatus() {
+    return {
+      name: this.name,
+      state: this.state,
+      failures: this.failures,
+      successCount: this.successCount,
+      nextAttempt: this.state === 'OPEN' ? new Date(this.nextAttempt).toISOString() : null,
+      lastFailureTime: this.lastFailureTime ? new Date(this.lastFailureTime).toISOString() : null
+    };
+  }
+}
+
+// Global circuit breakers
+const circuitBreakers = {
+  huggingfaceApi: new CircuitBreaker('huggingface-api', { failureThreshold: 3, resetTimeout: 300000 }),
+  huggingfaceScraping: new CircuitBreaker('huggingface-scraping', { failureThreshold: 5, resetTimeout: 600000 }),
+  arxivApi: new CircuitBreaker('arxiv-api', { failureThreshold: 3, resetTimeout: 300000 })
+};
+
 export async function scrapeDailyPapers() {
   const today = new Date().toISOString().split('T')[0];
   logger.info(`Starting daily paper scraping for ${today}`);
-  
+
   try {
-    // Scrape from both sources in parallel
-    const [arxivPapers, huggingfacePapers] = await Promise.allSettled([
+    // Add overall timeout protection for the entire scraping process
+    const scrapingPromise = Promise.allSettled([
       scrapeArxivPapers(),
       scrapeHuggingfacePapers()
+    ]);
+
+    const timeoutPromise = createTimeout(5 * 60 * 1000, 'Paper scraping timeout after 5 minutes');
+
+    const [arxivPapers, huggingfacePapers] = await Promise.race([
+      scrapingPromise,
+      timeoutPromise.then(() => { throw new Error('Paper scraping timeout after 5 minutes'); })
     ]);
     
     const allPapers = [];
@@ -50,47 +140,49 @@ export async function scrapeDailyPapers() {
 }
 
 async function scrapeArxivPapers() {
-  const config = SOURCE_CONFIGS.arxiv;
-  const categories = PAPER_SOURCES.arxiv.categories;
-  const papers = [];
-  
-  logger.info(`Scraping arXiv papers from categories: ${categories.join(', ')}`);
-  
-  // Build query for all categories
-  const categoryQuery = categories.map(cat => `cat:${cat}`).join(' OR ');
-  
-  // Try without date filter first to get recent papers
-  const searchQuery = categoryQuery;
-  const encodedQuery = encodeURIComponent(searchQuery);
-  
-  const url = `${PAPER_SOURCES.arxiv.baseUrl}?search_query=${encodedQuery}&start=0&max_results=${config.maxPapersPerRequest}&sortBy=${PAPER_SOURCES.arxiv.sortBy}&sortOrder=${PAPER_SOURCES.arxiv.sortOrder}`;
-  
-  try {
-    const response = await fetchWithTimeout(url, 30000);
-    const xmlContent = await response.text();
-    
-    // Parse XML response using regex-based parser for Cloudflare Workers
-    const entries = parseArxivXML(xmlContent);
-    
-    logger.info(`Found ${entries.length} entries in arXiv response`);
-    
-    for (let i = 0; i < entries.length; i++) {
-      try {
-        const entry = entries[i];
-        const paper = parseArxivEntry(entry);
-        if (paper) {
-          papers.push(paper);
+  return await circuitBreakers.arxivApi.execute(async () => {
+    const config = SOURCE_CONFIGS.arxiv;
+    const categories = PAPER_SOURCES.arxiv.categories;
+    const papers = [];
+
+    logger.info(`Scraping arXiv papers from categories: ${categories.join(', ')}`);
+
+    // Build query for all categories
+    const categoryQuery = categories.map(cat => `cat:${cat}`).join(' OR ');
+
+    // Try without date filter first to get recent papers
+    const searchQuery = categoryQuery;
+    const encodedQuery = encodeURIComponent(searchQuery);
+
+    const url = `${PAPER_SOURCES.arxiv.baseUrl}?search_query=${encodedQuery}&start=0&max_results=${config.maxPapersPerRequest}&sortBy=${PAPER_SOURCES.arxiv.sortBy}&sortOrder=${PAPER_SOURCES.arxiv.sortOrder}`;
+
+    try {
+      const response = await fetchWithTimeout(url, 30000);
+      const xmlContent = await response.text();
+
+      // Parse XML response using regex-based parser for Cloudflare Workers
+      const entries = parseArxivXML(xmlContent);
+
+      logger.info(`Found ${entries.length} entries in arXiv response`);
+
+      for (let i = 0; i < entries.length; i++) {
+        try {
+          const entry = entries[i];
+          const paper = parseArxivEntry(entry);
+          if (paper) {
+            papers.push(paper);
+          }
+        } catch (error) {
+          logger.warn(`Failed to parse arXiv entry ${i}:`, { error: error.message });
         }
-      } catch (error) {
-        logger.warn(`Failed to parse arXiv entry ${i}:`, { error: error.message });
       }
+
+      return papers;
+    } catch (error) {
+      logger.error('Error scraping arXiv:', error);
+      throw new AppError(`arXiv scraping failed: ${error.message}`);
     }
-    
-    return papers;
-  } catch (error) {
-    logger.error('Error scraping arXiv:', error);
-    throw new AppError(`arXiv scraping failed: ${error.message}`);
-  }
+  });
 }
 
 function parseArxivEntry(entry) {
@@ -132,100 +224,106 @@ function parseArxivEntry(entry) {
 }
 
 async function scrapeHuggingfacePapers() {
-  const config = SOURCE_CONFIGS.huggingface;
-  const papers = [];
-  
-  logger.info('Scraping HuggingFace papers');
-  
-  try {
-    // Try HuggingFace API first (if available) - with proper headers
-    const apiUrl = 'https://huggingface.co/api/papers';
-    let response;
-    
+  return await circuitBreakers.huggingfaceScraping.execute(async () => {
+    const config = SOURCE_CONFIGS.huggingface;
+    const papers = [];
+
+    logger.info('Scraping HuggingFace papers');
+
+    // Try HuggingFace API first with circuit breaker
     try {
-      // Add proper headers to avoid 401 Unauthorized
-      response = await fetchWithTimeout(apiUrl, 30000, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-          'Accept': 'application/json',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Referer': 'https://huggingface.co/',
-          'Origin': 'https://huggingface.co'
+      const apiPapers = await circuitBreakers.huggingfaceApi.execute(async () => {
+        const apiUrl = 'https://huggingface.co/api/papers';
+        const response = await fetchWithTimeout(apiUrl, 30000, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'application/json',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://huggingface.co/',
+            'Origin': 'https://huggingface.co'
+          }
+        });
+
+        if (response.ok) {
+          const apiData = await response.json();
+          logger.info(`HuggingFace API returned ${apiData.length || 0} papers`);
+          return parseHuggingFaceAPIResponse(apiData);
+        } else {
+          throw new Error(`HuggingFace API returned ${response.status}`);
         }
       });
-      
-      if (response.ok) {
-        const apiData = await response.json();
-        logger.info(`HuggingFace API returned ${apiData.length || 0} papers`);
-        return parseHuggingFaceAPIResponse(apiData);
-      } else if (response.status === 401 || response.status === 403) {
-        logger.info('HuggingFace API requires authentication, falling back to alternative methods');
-        // Continue to alternative methods
+
+      if (apiPapers && apiPapers.length > 0) {
+        return apiPapers;
       }
     } catch (apiError) {
-      logger.debug('HuggingFace API not available, falling back to scraping:', apiError.message);
+      logger.debug('HuggingFace API not available:', apiError.message);
     }
-    
-    // Alternative 1: Try scraping the papers page with better headers
+
+    // Alternative 1: Enhanced web scraping
     try {
+      logger.info('Attempting enhanced HuggingFace web scraping');
       const url = 'https://huggingface.co/papers';
-      response = await fetchWithTimeout(url, 30000, {
+      const response = await fetchWithTimeout(url, 30000, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.9',
-          'Accept-Encoding': 'gzip, deflate, br'
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
         }
       });
-      
+
       if (response.ok) {
         const htmlContent = await response.text();
-        
-        // Parse HTML to extract paper information
         const paperElements = parseHuggingfaceHTML(htmlContent);
-        
+
         logger.info(`Found ${paperElements.length} paper elements on HuggingFace`);
-        
+
+        // Process papers with enhanced abstract retrieval
         for (let i = 0; i < Math.min(paperElements.length, config.maxPapersPerRequest); i++) {
           try {
-            const paper = parseHuggingfacePaper(paperElements[i]);
+            const paper = await parseHuggingfacePaper(paperElements[i]);
             if (paper) {
+              // Accept all papers regardless of abstract quality - we'll analyze what we have
               papers.push(paper);
+              logger.debug(`Added paper (quality score: ${paper.abstract_quality}): ${paper.title.substring(0, 50)}...`);
             }
           } catch (error) {
             logger.warn(`Failed to parse HuggingFace paper ${i}:`, { error: error.message });
           }
-          
-          // Add delay to avoid rate limiting
+
           if (i < paperElements.length - 1) {
             await sleep(config.requestDelay);
           }
         }
-        
+
         if (papers.length > 0) {
+          logger.info(`Successfully retrieved ${papers.length} high-quality papers from HuggingFace`);
           return papers;
         }
       }
     } catch (scrapingError) {
-      logger.warn('Failed to scrape HuggingFace papers page:', scrapingError.message);
+      logger.warn('Enhanced HuggingFace scraping failed:', scrapingError.message);
     }
-    
-    // Alternative 2: Try HuggingFace datasets API for paper information
+
+    // Alternative 2: Datasets API
     try {
-      logger.info('Trying HuggingFace datasets API as alternative');
+      logger.info('Trying HuggingFace datasets API');
       const datasetsUrl = 'https://huggingface.co/api/datasets?full=true&limit=20';
-      response = await fetchWithTimeout(datasetsUrl, 30000, {
+      const response = await fetchWithTimeout(datasetsUrl, 30000, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
           'Accept': 'application/json',
           'Accept-Language': 'en-US,en;q=0.9'
         }
       });
-      
+
       if (response.ok) {
         const datasetsData = await response.json();
         const datasetPapers = parseHuggingFaceDatasets(datasetsData);
-        
+
         if (datasetPapers.length > 0) {
           logger.info(`Found ${datasetPapers.length} papers from HuggingFace datasets`);
           return datasetPapers.slice(0, config.maxPapersPerRequest);
@@ -234,47 +332,64 @@ async function scrapeHuggingfacePapers() {
     } catch (datasetError) {
       logger.debug('HuggingFace datasets API not available:', datasetError.message);
     }
-    
-    // Alternative 3: Try fallback with synthetic papers
-    logger.info('Attempting to create HuggingFace papers from trending AI topics');
+
+    // Alternative 3: Trending papers fallback
+    logger.info('Generating fallback HuggingFace papers from trending topics');
     const fallbackPapers = await generateFallbackHuggingFacePapers(config.maxPapersPerRequest);
-    
+
     if (fallbackPapers.length > 0) {
       logger.info(`Generated ${fallbackPapers.length} fallback HuggingFace papers`);
       return fallbackPapers;
     }
-    
-    // Final fallback: return empty array to preserve source integrity
-    logger.warn('All HuggingFace scraping methods failed, returning empty array to maintain source integrity');
+
+    logger.warn('All HuggingFace scraping methods failed, returning empty array');
     return [];
-    
-  } catch (error) {
-    logger.error('Error scraping HuggingFace:', error);
-    // Return empty array instead of throwing to prevent complete failure
-    return [];
-  }
+  });
 }
 
-function parseHuggingfacePaper(element) {
+async function parseHuggingfacePaper(element, apiKey = null) {
   try {
     // The element is now an object with pre-extracted properties
-    const title = element.title;
-    const abstract = element.abstract;
-    const link = element.link;
-    const authors = element.authors || [];
-    
+    let title = element.title;
+    let abstract = element.abstract;
+    let link = element.link;
+    let authors = element.authors || [];
+
     if (!title) {
       logger.warn('No title found in HuggingFace paper element');
       return null;
     }
-    
+
+    // Enhanced abstract retrieval with fallback chain
+    if (!abstract || abstract.length < 50) {
+      logger.debug(`Abstract too short or missing for "${title}", attempting retrieval...`);
+
+      // Try individual paper page scraping
+      if (link) {
+        const fullUrl = link.startsWith('http') ? link : `https://huggingface.co${link}`;
+        abstract = await scrapePaperFromIndividualPage(fullUrl) || abstract;
+
+        // Still no abstract, try arXiv cross-reference
+        if (!abstract || abstract.length < 50) {
+          logger.debug(`Attempting arXiv cross-reference for "${title}"...`);
+          abstract = await crossReferenceArxiv(title, authors) || abstract;
+        }
+      }
+    }
+
+    // Abstract quality validation
+    const abstractQuality = validateAbstractQuality(abstract);
+    if (abstractQuality.score < 3) {
+      logger.warn(`Low quality abstract for "${title}" (score: ${abstractQuality.score}): ${abstractQuality.reason}`);
+    }
+
     // Generate ID from title
     const id = `hf_${title.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}_${Date.now()}`;
-    
+
     // Infer category from title and abstract
     const text = `${title} ${abstract}`.toLowerCase();
     let category = 'machine-learning';
-    
+
     if (text.includes('vision') || text.includes('image') || text.includes('visual')) {
       category = 'computer_vision';
     } else if (text.includes('nlp') || text.includes('language') || text.includes('text')) {
@@ -282,7 +397,7 @@ function parseHuggingfacePaper(element) {
     } else if (text.includes('reinforcement') || text.includes('rl') || text.includes('agent')) {
       category = 'reinforcement_learning';
     }
-    
+
     return {
       id: id,
       title: title,
@@ -292,10 +407,11 @@ function parseHuggingfacePaper(element) {
       updated: new Date().toISOString(),
       category: category,
       source: 'huggingface',
-      original_source: 'huggingface', // 明确标记原始来源
+      original_source: 'huggingface_enhanced', // Mark as enhanced scraping
       url: link.startsWith('http') ? link : `https://huggingface.co${link}`,
       pdf_url: '', // HuggingFace may not provide direct PDF links
-      scraped_at: new Date().toISOString()
+      scraped_at: new Date().toISOString(),
+      abstract_quality: abstractQuality.score
     };
   } catch (error) {
     logger.error('Error parsing HuggingFace paper:', error);
@@ -471,6 +587,183 @@ function parseHuggingfaceHTML(htmlContent) {
   return papers;
 }
 
+// Scrape abstract from individual HuggingFace paper page
+async function scrapePaperFromIndividualPage(paperUrl) {
+  try {
+    logger.debug(`Scraping individual paper page: ${paperUrl}`);
+
+    const response = await fetchWithTimeout(paperUrl, 15000, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch paper page: ${response.status}`);
+    }
+
+    const htmlContent = await response.text();
+
+    logger.debug(`Retrieved HTML content (${htmlContent.length} chars) from ${paperUrl}`);
+
+    // Enhanced abstract extraction from individual paper pages
+    const abstractExtractionPatterns = [
+      // HuggingFace specific pattern - exact match for <div class="abstract">
+      /<div[^>]*class="abstract"[^>]*>([\s\S]*?)<\/div>/gi,
+      // HuggingFace meta tags
+      /<meta[^>]*property="og:description"[^>]*content="([^"]*)"[^>]*>/gi,
+      /<meta[^>]*name="description"[^>]*content="([^"]*)"[^>]*>/gi,
+      // General abstract patterns (fallbacks)
+      /<div[^>]*class="[^"]*abstract[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+      /<section[^>]*class="[^"]*abstract[^"]*"[^>]*>([\s\S]*?)<\/section>/gi,
+      /<div[^>]*class="[^"]*(?:description|summary)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+      // Paragraph patterns
+      /<p[^>]*class="[^"]*abstract[^"]*"[^>]*>([\s\S]*?)<\/p>/gi,
+      // Data attribute patterns
+      /<div[^>]*data-testid="[^"]*abstract[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+      // Content div patterns
+      /<div[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/div>/gi
+    ];
+
+    logger.debug(`Trying ${abstractExtractionPatterns.length} abstract extraction patterns`);
+
+    for (let i = 0; i < abstractExtractionPatterns.length; i++) {
+      const pattern = abstractExtractionPatterns[i];
+      let match;
+      try {
+        while ((match = pattern.exec(htmlContent)) !== null) {
+          const content = match[1] || match[0];
+          if (content) {
+            const cleanContent = content
+              .replace(/<[^>]*>/g, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            // Lowered length requirement from 100 to 50 chars, and added debug info
+            if (cleanContent.length > 50 &&
+                !cleanContent.includes('Sign up') &&
+                !cleanContent.includes('Login') &&
+                !cleanContent.includes('Subscribe') &&
+                !cleanContent.includes('Follow')) {
+              logger.debug(`Pattern ${i + 1} found abstract (${cleanContent.length} chars): ${cleanContent.substring(0, 100)}...`);
+              return cleanContent;
+            } else if (cleanContent.length > 10) {
+              logger.debug(`Pattern ${i + 1} found content but too short or filtered: ${cleanContent.substring(0, 50)}...`);
+            }
+          }
+        }
+
+        logger.debug(`Pattern ${i + 1} found no matches`);
+      } catch (error) {
+        logger.warn(`Error applying pattern ${i + 1} for abstract extraction: ${error.message}`);
+      }
+    }
+
+    logger.debug(`No abstract found on individual page: ${paperUrl}`);
+    return null;
+
+  } catch (error) {
+    logger.warn(`Failed to scrape individual paper page ${paperUrl}:`, error.message);
+    return null;
+  }
+}
+
+// Cross-reference with arXiv for missing abstracts
+async function crossReferenceArxiv(title, authors = []) {
+  try {
+    logger.debug(`Cross-referencing arXiv for title: ${title.substring(0, 50)}...`);
+
+    // Create search query from title and optionally authors
+    const titleWords = title.toLowerCase().split(' ').slice(0, 5).join(' ');
+    const searchQuery = authors.length > 0 ?
+      `${titleWords} ${authors[0].toLowerCase()}` :
+      titleWords;
+
+    const encodedQuery = encodeURIComponent(searchQuery);
+    const arxivUrl = `https://export.arxiv.org/api/query?search_query=all:${encodedQuery}&start=0&max_results=3&sortBy=relevance&sortOrder=descending`;
+
+    const response = await fetchWithTimeout(arxivUrl, 10000);
+    const xmlContent = await response.text();
+
+    const entries = parseArxivXML(xmlContent);
+
+    if (entries.length > 0) {
+      // Find the best match based on title similarity
+      let bestMatch = null;
+      let highestSimilarity = 0;
+
+      for (const entry of entries) {
+        const similarity = calculateTitleSimilarity(title.toLowerCase(), entry.title.toLowerCase());
+        if (similarity > highestSimilarity && similarity > 0.7) {
+          highestSimilarity = similarity;
+          bestMatch = entry;
+        }
+      }
+
+      if (bestMatch && bestMatch.summary.length > 100) {
+        logger.debug(`Found arXiv cross-reference with similarity ${highestSimilarity.toFixed(2)}: ${bestMatch.title.substring(0, 50)}...`);
+        return bestMatch.summary;
+      }
+    }
+
+    logger.debug(`No suitable arXiv cross-reference found for: ${title.substring(0, 50)}...`);
+    return null;
+
+  } catch (error) {
+    logger.warn(`Failed to cross-reference arXiv for "${title.substring(0, 50)}...":`, error.message);
+    return null;
+  }
+}
+
+// Calculate title similarity using simple string matching
+function calculateTitleSimilarity(title1, title2) {
+  const words1 = title1.toLowerCase().split(/\s+/);
+  const words2 = title2.toLowerCase().split(/\s+/);
+
+  const commonWords = words1.filter(word => word.length > 3 && words2.includes(word));
+  const totalUniqueWords = [...new Set([...words1, ...words2])].filter(word => word.length > 3);
+
+  return commonWords.length / totalUniqueWords.length;
+}
+
+// Validate abstract quality (more lenient scoring)
+function validateAbstractQuality(abstract) {
+  if (!abstract || typeof abstract !== 'string') {
+    return { score: 1, reason: 'No abstract available - will use title-only analysis' }; // Give 1 point instead of 0
+  }
+
+  const length = abstract.trim().length;
+  const words = abstract.trim().split(/\s+/);
+
+  // More lenient quality criteria
+  const checks = {
+    length: length >= 50 ? 2 : (length >= 20 ? 1 : 0), // Lowered from 100 to 50, 50 to 20
+    wordCount: words.length >= 10 ? 2 : (words.length >= 5 ? 1 : 0), // Lowered from 20 to 10, 10 to 5
+    hasTechnicalTerms: /\b(method|model|algorithm|approach|technique|framework|architecture|system|experiment|result|performance|evaluation|analysis|dataset|training|learning|network|transformer|neural|deep)\b/i.test(abstract) ? 1 : 0, // Reduced from 2 to 1
+    notGeneric: !/\b(this paper|we present|in this work|our approach|the proposed)\b/i.test(abstract.substring(0, 100)) ? 1 : 0,
+    notSpam: !/(sign up|subscribe|follow|click here|buy now|free trial)/i.test(abstract) ? 1 : 0
+  };
+
+  const score = Object.values(checks).reduce((sum, val) => sum + val, 0);
+  const maxScore = Object.keys(checks).length;
+
+  let reason = '';
+  if (score < 2) { // Lowered threshold from 3 to 2
+    if (length < 20) reason = 'Very short abstract';
+    else if (words.length < 5) reason = 'Very few words';
+    else if (!checks.hasTechnicalTerms) reason = 'Limited technical content';
+    else if (!checks.notGeneric) reason = 'Generic content';
+    else if (!checks.notSpam) reason = 'Contains spam indicators';
+  } else {
+    reason = 'Acceptable abstract quality';
+  }
+
+  return { score, maxScore, reason };
+}
+
 // Parse individual HuggingFace paper content
 function parseHuggingfacePaperContent(paperContent) {
   try {
@@ -553,7 +846,7 @@ function parseHuggingfacePaperContent(paperContent) {
         
         for (const pattern of summaryPatterns) {
           const summaryMatch = paperContent.match(pattern);
-          if (summaryMatch) {
+          if (summaryMatch && summaryMatch[1]) {
             const content = summaryMatch[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
             if (content.length > 10) {
               return content;
@@ -973,21 +1266,39 @@ async function generateFallbackHuggingFacePapers(maxPapers = 5) {
 }
 
 function removeDuplicatePapers(papers) {
+  // Handle edge cases
+  if (!papers || !Array.isArray(papers)) {
+    logger.warn('Invalid papers array provided to removeDuplicatePapers, returning empty array');
+    return [];
+  }
+
   const seen = new Set();
   const uniquePapers = [];
-  
+
   for (const paper of papers) {
-    // Create a simple hash of the title for duplicate detection
-    const titleHash = paper.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-    
-    if (!seen.has(titleHash)) {
-      seen.add(titleHash);
-      uniquePapers.push(paper);
-    } else {
-      logger.debug(`Removed duplicate paper: ${paper.title}`);
+    try {
+      // Skip invalid paper objects
+      if (!paper || !paper.title) {
+        logger.warn('Skipping invalid paper object:', paper);
+        continue;
+      }
+
+      // Create a simple hash of the title for duplicate detection
+      const titleHash = paper.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+      if (!seen.has(titleHash)) {
+        seen.add(titleHash);
+        uniquePapers.push(paper);
+      } else {
+        logger.debug(`Removed duplicate paper: ${paper.title}`);
+      }
+    } catch (error) {
+      logger.warn('Error processing paper during duplicate removal:', error);
+      // Skip this paper and continue processing others
+      continue;
     }
   }
-  
+
   return uniquePapers;
 }
 

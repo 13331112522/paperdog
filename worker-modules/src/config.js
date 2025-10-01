@@ -19,6 +19,7 @@ export const routes = {
   'GET /api/papers': 'handlePapersList',
   'GET /api/papers/:date': 'handlePapersByDate',
   'GET /api/papers/:id': 'handlePaperById',
+  'POST /api/papers/:id/view': 'handleTrackPaperView',
   'POST /api/update': 'handleUpdatePapers',
   'GET /api/categories': 'handleCategories',
   'GET /api/search': 'handleSearch',
@@ -91,7 +92,7 @@ export const SOURCE_CONFIGS = {
 export const MODEL_CONFIG = {
   analysis: 'openai/gpt-5-mini',
   fallback_analysis: 'google/gemini-2.5-flash-preview-09-2025',
-  summary: 'x-ai/grok-4-fast',
+  summary: 'openai/gpt-5-mini',
   translation: 'google/gemini-2.5-flash-preview-09-2025'
 };
 

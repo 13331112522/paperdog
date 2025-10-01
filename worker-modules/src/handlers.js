@@ -9,7 +9,10 @@ import {
   errorResponse,
   sortPapersByDate,
   filterPapersByCategory,
-  searchPapers
+  searchPapers,
+  incrementPaperView,
+  getPaperViewCount,
+  enrichPapersWithViews
 } from './utils.js';
 import { scrapeDailyPapers } from './paper-scraper.js';
 import { analyzePapers } from './paper-analyzer.js';
@@ -82,11 +85,14 @@ export async function handleRoot(request, env) {
     // displayPapers is now the balanced top 10 from filterAndSortPapers
     const displayPapers = papers || [];
 
+    // Enrich papers with view counts before passing to template
+    const papersWithViews = await enrichPapersWithViews(displayPapers, env);
+
     // Get visitor stats for display
     const visitorStats = await getVisitorStats(env);
     const formattedStats = formatVisitorStats(visitorStats);
 
-    return htmlResponse(getDualColumnHTML(displayPapers, dailyReport, formattedStats));
+    return htmlResponse(getDualColumnHTML(papersWithViews, dailyReport, formattedStats));
   } catch (error) {
     logger.error('Error in root handler:', error);
     return htmlResponse(getIndexHTML([], null));
@@ -154,9 +160,12 @@ export async function handlePapersList(request, env) {
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
     const paginatedPapers = papers.slice(startIndex, endIndex);
-    
+
+    // Enrich papers with view counts
+    const papersWithViews = await enrichPapersWithViews(paginatedPapers, env);
+
     const response = {
-      papers: paginatedPapers,
+      papers: papersWithViews,
       pagination: {
         current_page: page,
         total_pages: Math.ceil(papers.length / limit),
@@ -170,7 +179,7 @@ export async function handlePapersList(request, env) {
         date: date
       }
     };
-    
+
     return jsonResponse(response);
   } catch (error) {
     logger.error('Error in papers list handler:', error);
@@ -181,16 +190,19 @@ export async function handlePapersList(request, env) {
 export async function handlePapersByDate(request, env, date) {
   try {
     validateDate(date);
-    
+
     const papers = await getCachedPapers(date, env);
     if (!papers) {
       return errorResponse('No papers found for this date', 404);
     }
-    
+
+    // Enrich papers with view counts
+    const papersWithViews = await enrichPapersWithViews(papers, env);
+
     return jsonResponse({
       date: date,
-      papers: papers,
-      total_papers: papers.length
+      papers: papersWithViews,
+      total_papers: papersWithViews.length
     });
   } catch (error) {
     logger.error('Error in papers by date handler:', error);
@@ -202,25 +214,32 @@ export async function handlePaperById(request, env, paperId) {
   try {
     // Try to find the paper in recent cached data
     let paper = null;
-    
+
     // Search through the last 7 days of cached papers
     for (let i = 0; i < 7; i++) {
       const date = new Date();
       date.setDate(date.getDate() - i);
       const dateStr = date.toISOString().split('T')[0];
       const papers = await getCachedPapers(dateStr, env);
-      
+
       if (papers) {
         paper = papers.find(p => p.id === paperId);
         if (paper) break;
       }
     }
-    
+
     if (!paper) {
       return errorResponse('Paper not found', 404);
     }
-    
-    return jsonResponse(paper);
+
+    // Add view count to paper
+    const viewCount = await getPaperViewCount(paperId, env);
+    const paperWithViews = {
+      ...paper,
+      views: viewCount
+    };
+
+    return jsonResponse(paperWithViews);
   } catch (error) {
     logger.error('Error in paper by ID handler:', error);
     return errorResponse(error.message, error.statusCode || 500);
@@ -801,17 +820,17 @@ export async function handleAbout(request, env) {
 export async function handleScoringReport(request, env, date) {
   try {
     validateDate(date);
-    
+
     const papers = await getCachedPapers(date, env);
     if (!papers || papers.length === 0) {
       return errorResponse('No papers found for this date', 404);
     }
-    
+
     // Generate scoring report
     const scoringReport = generateScoringReport(papers);
-    
+
     logger.info(`Generated scoring report for ${date} with ${papers.length} papers`);
-    
+
     return jsonResponse({
       date: date,
       papers_count: papers.length,
@@ -821,6 +840,49 @@ export async function handleScoringReport(request, env, date) {
   } catch (error) {
     logger.error('Error in scoring report handler:', error);
     return errorResponse(error.message, error.statusCode || 500);
+  }
+}
+
+export async function handleTrackPaperView(request, env, paperId) {
+  try {
+    if (!paperId) {
+      return errorResponse('Paper ID is required', 400);
+    }
+
+    // Find the paper first to ensure it exists
+    let paper = null;
+
+    // Search through the last 7 days of cached papers
+    for (let i = 0; i < 7; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      const papers = await getCachedPapers(dateStr, env);
+
+      if (papers) {
+        paper = papers.find(p => p.id === paperId);
+        if (paper) break;
+      }
+    }
+
+    if (!paper) {
+      return errorResponse('Paper not found', 404);
+    }
+
+    // Increment view count
+    const newViewCount = await incrementPaperView(paperId, env);
+
+    logger.info(`Tracked view for paper ${paperId}: ${newViewCount} views`);
+
+    return jsonResponse({
+      success: true,
+      paper_id: paperId,
+      views: newViewCount,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error tracking paper view:', error);
+    return errorResponse('Failed to track view', 500);
   }
 }
 
@@ -961,5 +1023,6 @@ export const handlers = {
   handleRSSFeed,
   handleAbout,
   handleScoringReport,
+  handleTrackPaperView,
   handleArchivePage
 };

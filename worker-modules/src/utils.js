@@ -433,3 +433,58 @@ export function paginateArray(array, page, limit) {
     }
   };
 }
+
+// View tracking functions
+export async function incrementPaperView(paperId, env) {
+  try {
+    const viewKey = `views_${paperId}`;
+    const currentViews = await env.PAPERS.get(viewKey);
+    const newViews = currentViews ? parseInt(currentViews) + 1 : 1;
+
+    await env.PAPERS.put(viewKey, newViews.toString(), {
+      expirationTtl: 365 * 24 * 60 * 60 // 1 year TTL
+    });
+
+    return newViews;
+  } catch (error) {
+    console.error('Error incrementing paper views:', error);
+    return 0;
+  }
+}
+
+export async function getPaperViewCount(paperId, env) {
+  try {
+    const viewKey = `views_${paperId}`;
+    const views = await env.PAPERS.get(viewKey);
+    return views ? parseInt(views) : 0;
+  } catch (error) {
+    console.error('Error getting paper view count:', error);
+    return 0;
+  }
+}
+
+export async function addViewToPaper(paper, env) {
+  if (!paper || !paper.id) {
+    return paper;
+  }
+
+  const newViewCount = await incrementPaperView(paper.id, env);
+  return {
+    ...paper,
+    views: newViewCount
+  };
+}
+
+export async function enrichPapersWithViews(papers, env) {
+  const papersWithViews = await Promise.all(
+    papers.map(async (paper) => {
+      const viewCount = await getPaperViewCount(paper.id, env);
+      return {
+        ...paper,
+        views: viewCount
+      };
+    })
+  );
+
+  return papersWithViews;
+}

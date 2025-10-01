@@ -11,6 +11,7 @@ import {
   handleRSSFeed,
   handleAbout,
   handleScoringReport,
+  handleTrackPaperView,
   handleArchivePage
 } from '../src/handlers.js';
 import { archiveHandlers } from '../src/archive-handlers.js';
@@ -32,6 +33,7 @@ const handlers = {
   handleRSSFeed,
   handleAbout,
   handleScoringReport,
+  handleTrackPaperView,
   handleArchivePage,
   // Archive handlers
   handleArchiveDates: archiveHandlers.handleArchiveDates,

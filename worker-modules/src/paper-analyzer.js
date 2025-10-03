@@ -83,31 +83,51 @@ export async function analyzePapers(papers, apiKey) {
   logger.info(`Starting analysis of ${papers.length} papers`);
   
   const analyzedPapers = [];
-  const BATCH_SIZE = 1; // Process papers one at a time to avoid GPT-5-mini rate limits
+  const BATCH_SIZE = 3; // Process 3 papers in parallel for better performance
 
   for (let i = 0; i < papers.length; i += BATCH_SIZE) {
-    const paper = papers[i];
-    logger.info(`Analyzing paper ${i + 1}/${papers.length}: ${paper.title.substring(0, 50)}...`);
+    const batch = papers.slice(i, i + BATCH_SIZE);
+    const batchStartIndex = i + 1;
+    const batchEndIndex = Math.min(i + BATCH_SIZE, papers.length);
 
-    try {
-      const analyzedPaper = await analyzeSinglePaper(paper, apiKey);
-      if (analyzedPaper) {
-        analyzedPapers.push(analyzedPaper);
-        logger.info(`Successfully analyzed paper ${i + 1}/${papers.length}`);
+    logger.info(`Processing batch ${Math.ceil(i / BATCH_SIZE) + 1}: papers ${batchStartIndex}-${batchEndIndex}`);
+
+    // Process papers in parallel
+    const batchPromises = batch.map(async (paper, batchIndex) => {
+      const paperIndex = i + batchIndex + 1;
+      try {
+        logger.info(`Analyzing paper ${paperIndex}/${papers.length}: ${paper.title.substring(0, 50)}...`);
+        const analyzedPaper = await analyzeSinglePaper(paper, apiKey);
+        if (analyzedPaper) {
+          logger.info(`Successfully analyzed paper ${paperIndex}/${papers.length}`);
+          return analyzedPaper;
+        }
+        return null;
+      } catch (error) {
+        logger.error(`Failed to analyze paper ${paperIndex}/${papers.length}:`, {
+          error: error.message,
+          title: paper.title
+        });
+        return createFallbackAnalysis(paper);
       }
-    } catch (error) {
-      logger.error(`Failed to analyze paper ${i + 1}/${papers.length}:`, {
-        error: error.message,
-        title: paper.title
-      });
-      // Add paper without analysis for fallback
-      analyzedPapers.push(createFallbackAnalysis(paper));
-    }
+    });
 
-    // Add delay between papers to avoid rate limiting (quadratic backoff)
+    // Wait for all papers in the batch to complete
+    const batchResults = await Promise.allSettled(batchPromises);
+
+    // Collect successful results
+    batchResults.forEach((result, index) => {
+      if (result.status === 'fulfilled' && result.value) {
+        analyzedPapers.push(result.value);
+      } else {
+        logger.error(`Paper ${i + index + 1} failed or returned null`);
+      }
+    });
+
+    // Add delay between batches to avoid rate limiting
     if (i + BATCH_SIZE < papers.length) {
-      const delay = Math.min(3000 + (i * 500), 8000); // Start 3s, increase by 500ms per paper, max 8s
-      logger.debug(`Waiting ${delay}ms before next paper...`);
+      const delay = Math.min(1000 + (Math.ceil(i / BATCH_SIZE) * 200), 3000);
+      logger.debug(`Waiting ${delay}ms before next batch...`);
       await sleep(delay);
     }
   }
@@ -220,7 +240,7 @@ async function callLLM(prompt, model, params, apiKey) {
 
   // Retry logic for network failures - optimized for GPT-5-mini
   const maxRetries = 3;
-  const baseTimeout = 120000; // 120 seconds for GPT-5-mini
+  const baseTimeout = 30000; // 30 seconds for faster failure detection
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -298,10 +318,49 @@ async function parseAnalysisResponse(response, apiKey) {
     // Remove markdown code blocks with better detection
     cleanResponse = cleanResponse.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
 
+    logger.debug(`Initial response length: ${cleanResponse.length}`);
+    logger.debug(`Response pattern example: ${cleanResponse.substring(0, 300)}`);
+
+    // Step 1: Fix basic syntax issues
+    cleanResponse = cleanResponse.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+
+    // Step 2: Advanced quote escaping for nested quotes (more precise)
+    // Find strings like "key": "value with "quotes" inside"
+    let quoteEscapeStep = 0;
+    let previousLength = cleanResponse.length;
+    while (quoteEscapeStep < 5 && cleanResponse.length === previousLength) {
+      previousLength = cleanResponse.length;
+      // Look for unescaped quotes within string values
+      cleanResponse = cleanResponse.replace(/:\s*"([^"]*(?<!\\)"[^"]*(?<!\\)")([^",}:]*(?<!\\)")[,}\s]*($|(?=\s*[,{}\s]))/g, (match, content, rest) => {
+        // Escape the inner quotes
+        const escapedContent = content.replace(/"(?![^"]*\\")/g, '\\"');
+        return `: "${escapedContent}"${rest}`;
+      });
+      quoteEscapeStep++;
+      if (cleanResponse.length !== previousLength) {
+        logger.debug(`Quote escaping iteration ${quoteEscapeStep}: Applied fixes`);
+      }
+    }
+
+    // Step 3: Handle quotes around complex values (authors, technical terms)
+    cleanResponse = cleanResponse.replace(/("authors"|"name"|"title")[^}]*"([^"]*(?<!\\)")(?:\s*,\s*(?=(?:"[^"]+"|[},])))/g, (match, key, value) => {
+      const escapedValue = value.replace(/"/g, '\\"');
+      return `${key}": "${escapedValue}"`;
+    });
+
+    // Step 4: Final cleanup for common leftovers
+    cleanResponse = cleanResponse.replace(/:\s*"/g, ': "').replace(/"\s*,/g, '",');
+
+    // Step 5: Handle newlines and tabs
+    cleanResponse = cleanResponse.replace(/\\n/g, ' ').replace(/\\t/g, ' ');
+
+    logger.debug(`After all fixes - length: ${cleanResponse.length}`);
+
     // Try to extract JSON object boundaries if response has extra text
-    const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+    const jsonMatch = cleanResponse.match(/\{[^{}]*"introduction"[^{}]*\}/);
     if (jsonMatch) {
       cleanResponse = jsonMatch[0];
+      logger.debug('Extracted JSON object from larger text');
     }
 
     logger.debug(`Attempting to parse cleaned JSON response (${cleanResponse.length} chars)`);
@@ -538,13 +597,14 @@ async function applyFallbackTranslations(analysis, apiKey) {
 
   logger.info(`Applying fallback translations for ${translationsNeeded.length} fields`);
 
-  for (const pair of translationsNeeded) {
+  // Process translations concurrently for better performance
+  const translationPromises = translationsNeeded.map(async (pair) => {
     const englishContent = analysis[pair.english];
-    
+
     // Skip if English content is empty or "Not provided"
     if (!englishContent || englishContent.trim() === '' || englishContent.trim() === 'Not provided') {
       analysis[pair.chinese] = '英文内容不可用 / English content not available';
-      continue;
+      return { field: pair.chinese, success: true };
     }
 
     try {
@@ -556,23 +616,37 @@ ${englishContent}
 请只返回翻译后的中文文本，不要添加任何额外说明或格式。`;
 
       const translatedContent = await callLLM(translationPrompt, MODEL_CONFIG.translation, MODEL_PARAMS.translation, apiKey);
-      
+
       // Clean up the response
       let cleanTranslation = translatedContent.trim();
       if (cleanTranslation.startsWith('```')) {
         cleanTranslation = cleanTranslation.replace(/```[\w]*\n?/, '').replace(/\n?```$/, '');
       }
-      
+
       analysis[pair.chinese] = cleanTranslation;
       logger.debug(`Successfully translated ${pair.promptKey} to Chinese`);
-      
-      // Small delay to avoid rate limiting
-      await sleep(500);
-      
+      return { field: pair.chinese, success: true };
+
     } catch (translationError) {
       logger.warn(`Failed to translate ${pair.promptKey}:`, translationError.message);
       analysis[pair.chinese] = `翻译失败，请查看英文原文 / Translation failed, please see English original`;
+      return { field: pair.chinese, success: false, error: translationError.message };
     }
+  });
+
+  // Wait for all translations to complete
+  const translationResults = await Promise.allSettled(translationPromises);
+
+  // Log results
+  const successfulTranslations = translationResults.filter(r =>
+    r.status === 'fulfilled' && r.value?.success
+  ).length;
+
+  logger.info(`Completed ${successfulTranslations}/${translationsNeeded.length} translations`);
+
+  // Small delay after concurrent translations to avoid rate limiting
+  if (translationsNeeded.length > 0) {
+    await sleep(200);
   }
 
   logger.info('Fallback translations completed');

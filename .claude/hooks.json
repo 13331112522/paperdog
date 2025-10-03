@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "say 'Claude Code session completed!'"
+          }
+        ]
+      }
+    ],
+    "ToolUse": [
+      {
+        "matcher": "TodoWrite",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Hook executed!' && say 'TodoWrite tool used'"
+          }
+        ]
+      }
+    ]
+  }
+}

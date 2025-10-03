@@ -18,6 +18,157 @@ const logger = {
   error: (msg, data = {}) => console.error(`[ERROR] ${msg}`, data)
 };
 
+// JSON content sanitization for abstracts and translations
+function sanitizeJsonContent(content) {
+  if (!content || typeof content !== 'string') {
+    return content;
+  }
+
+  // Handle HuggingFace JSON metadata contamination - look for specific patterns
+  if (content.includes('":"') || content.includes('_id') || content.includes('updatedAt') || content.includes('"paper":')) {
+    logger.debug('Detected JSON metadata contamination, cleaning abstract...');
+
+    // Strategy 1: Find the actual abstract before JSON metadata starts
+    // Look for common JSON start patterns
+    const jsonStartPatterns = [
+      '","updatedAt',
+      '","_id',
+      '"paper":',
+      '"authors":',
+      '"organization":',
+      '"canRead"',
+      '","dailyPaperRank',
+      '"acceptLanguages"',
+      '"upvoters"',
+      '"discussionId"',
+      '"ai_summary"',
+      '"ai_keywords"',
+      '"githubStars"'
+    ];
+
+    let bestCutIndex = -1;
+    for (const pattern of jsonStartPatterns) {
+      const index = content.indexOf(pattern);
+      if (index > 50) { // Only cut if we have substantial content before the JSON
+        bestCutIndex = index === -1 ? bestCutIndex : (bestCutIndex === -1 ? index : Math.min(bestCutIndex, index));
+      }
+    }
+
+    if (bestCutIndex > 50) {
+      const cleanAbstract = content.substring(0, bestCutIndex).trim();
+      logger.debug(`Extracted clean abstract (${cleanAbstract.length} chars) before JSON metadata`);
+      return cleanAbstract;
+    }
+
+    // Strategy 2: Try to extract content from structured JSON if entire content is JSON
+    if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(content);
+        // Extract meaningful text from HuggingFace JSON structures
+        if (typeof parsed === 'object') {
+          // Handle HuggingFace paper structure
+          if (parsed.summary && typeof parsed.summary === 'string') {
+            return parsed.summary.trim();
+          }
+          if (parsed.abstract && typeof parsed.abstract === 'string') {
+            return parsed.abstract.trim();
+          }
+          if (parsed.description && typeof parsed.description === 'string') {
+            return parsed.description.trim();
+          }
+
+          // Handle nested paper object
+          if (parsed.paper && parsed.paper.summary) {
+            return parsed.paper.summary.trim();
+          }
+
+          // Handle array of strings
+          if (Array.isArray(parsed)) {
+            const textItems = parsed.filter(item => typeof item === 'string' && item.length > 20);
+            if (textItems.length > 0) {
+              return textItems.join('. ');
+            }
+          }
+        }
+      } catch (e) {
+        logger.debug('Failed to parse JSON content, trying alternative extraction');
+      }
+    }
+
+    // Strategy 3: Use regex to extract text before JSON contamination
+    // Look for sentences that end before JSON starts
+    const textBeforeJson = content.split(/"\s*(?:,|})/)[0];
+    if (textBeforeJson.length > 50) {
+      // Further clean up - remove any trailing JSON-like fragments
+      const cleanedText = textBeforeJson.replace(/,\s*"[^"]*":\s*"[^"]*"$/g, '').trim();
+      if (cleanedText.length > 30) {
+        logger.debug(`Extracted text before JSON using regex: ${cleanedText.length} chars`);
+        return cleanedText;
+      }
+    }
+
+    // Strategy 4: Extract sentences that look like academic abstract content
+    const sentences = content.split(/[.!?]+/);
+    const academicSentences = sentences
+      .map(s => s.trim())
+      .filter(s =>
+        s.length > 20 &&
+        !s.includes('":"') &&
+        !s.includes('_id') &&
+        !s.includes('updatedAt') &&
+        !s.includes('huggingface.co') &&
+        !s.includes('avatars/') &&
+        !s.includes('github.com') &&
+        /^[A-Z]/.test(s) // Starts with capital letter
+      );
+
+    if (academicSentences.length > 0) {
+      const academicAbstract = academicSentences.join('. ') + '.';
+      logger.debug(`Reconstructed academic abstract from sentences: ${academicAbstract.length} chars`);
+      return academicAbstract;
+    }
+
+    // If all strategies fail, log warning and return empty
+    logger.warn('Could not extract clean abstract from JSON-contaminated content, discarding');
+    return '';
+  }
+
+  // Try to parse if it looks like pure JSON (for legitimate JSON responses)
+  if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
+    try {
+      const parsed = JSON.parse(content);
+      // Extract meaningful text from JSON structures
+      if (typeof parsed === 'object') {
+        // Handle different JSON structures
+        if (parsed.abstract) return parsed.abstract;
+        if (parsed.description) return parsed.description;
+        if (parsed.summary) return parsed.summary;
+        if (parsed.text) return parsed.text;
+        if (parsed.challenges && Array.isArray(parsed.challenges)) {
+          return parsed.challenges.join('. ');
+        }
+        if (parsed.introduction) return parsed.introduction;
+        if (parsed.innovations) return parsed.innovations;
+        if (parsed.experiments) return parsed.experiments;
+        if (parsed.insights) return parsed.insights;
+
+        // If it's an array of strings, join them
+        if (Array.isArray(parsed)) {
+          return parsed.filter(item => typeof item === 'string').join('. ');
+        }
+
+        // Fallback: stringify the object nicely
+        return JSON.stringify(parsed, null, 2);
+      }
+    } catch (e) {
+      // If parsing fails, return original content
+      logger.debug('Failed to parse JSON content, using original', { content: content.substring(0, 100) });
+    }
+  }
+
+  return content;
+}
+
 // Circuit breaker for API reliability
 class CircuitBreaker {
   constructor(name, options = {}) {
@@ -375,6 +526,18 @@ async function parseHuggingfacePaper(element, apiKey = null) {
           abstract = await crossReferenceArxiv(title, authors) || abstract;
         }
       }
+    }
+
+    // Final safety check - ensure abstract doesn't contain JSON metadata
+    if (abstract && (abstract.includes('":"') || abstract.includes('_id') || abstract.includes('updatedAt'))) {
+      logger.debug(`Abstract still contains JSON metadata for "${title}", applying final cleanup...`);
+      abstract = sanitizeJsonContent(abstract);
+    }
+
+    // If after sanitization we still have issues, create a placeholder
+    if (!abstract || abstract.length < 20 || abstract.includes('":"')) {
+      logger.warn(`Could not extract clean abstract for "${title}", using placeholder`);
+      abstract = `Abstract not available. This paper discusses research related to ${title}. Please visit the paper's website for more details.`;
     }
 
     // Abstract quality validation
@@ -818,17 +981,26 @@ function parseHuggingfacePaperContent(paperContent) {
           /<div[^>]*class="[^"]*(abstract|description|summary|content)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
           /<div[^>]*data-testid="[^"]*(abstract|description)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
           /<section[^>]*class="[^"]*(abstract|description)[^"]*"[^>]*>([\s\S]*?)<\/section>/gi,
-          /<div[^>]*data-testid="[^"]*(paper|card)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
           /<div[^>]*class="[^"]*(prose|markdown)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi
         ];
-        
+
         for (const pattern of abstractPatterns) {
           const abstractMatch = paperContent.match(pattern);
-          if (abstractMatch) {
+          if (abstractMatch && abstractMatch[1]) {
             const content = abstractMatch[2] || abstractMatch[1];
             const cleanContent = content.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-            if (cleanContent.length > 10) {
-              return cleanContent;
+
+            // Filter out content that contains JSON metadata - be more aggressive
+            if (cleanContent.length > 10 &&
+                !cleanContent.includes('":"') &&
+                !cleanContent.includes('_id') &&
+                !cleanContent.includes('updatedAt') &&
+                !cleanContent.includes('"paper":') &&
+                !cleanContent.includes('"authors":') &&
+                !cleanContent.includes('huggingface.co') &&
+                !cleanContent.includes('avatars/') &&
+                !cleanContent.includes('github.com')) {
+              return sanitizeJsonContent(cleanContent);
             }
           }
         }
@@ -843,13 +1015,23 @@ function parseHuggingfacePaperContent(paperContent) {
           /<div[^>]*data-testid="[^"]*summary[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
           /<div[^>]*class="[^"]*(text-gray|text-muted)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi
         ];
-        
+
         for (const pattern of summaryPatterns) {
           const summaryMatch = paperContent.match(pattern);
           if (summaryMatch && summaryMatch[1]) {
             const content = summaryMatch[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-            if (content.length > 10) {
-              return content;
+
+            // Filter out content that contains JSON metadata - be more aggressive
+            if (content.length > 10 &&
+                !content.includes('":"') &&
+                !content.includes('_id') &&
+                !content.includes('updatedAt') &&
+                !content.includes('"paper":') &&
+                !content.includes('"authors":') &&
+                !content.includes('huggingface.co') &&
+                !content.includes('avatars/') &&
+                !content.includes('github.com')) {
+              return sanitizeJsonContent(content);
             }
           }
         }
@@ -883,7 +1065,7 @@ function parseHuggingfacePaperContent(paperContent) {
             const content = match[1] || match[0].replace(/<[^>]*>/g, '');
             const cleanContent = content.replace(/\s+/g, ' ').trim();
             if (cleanContent.length > 20) {
-              return cleanContent;
+              return sanitizeJsonContent(cleanContent);
             }
           }
         }
@@ -917,11 +1099,61 @@ function parseHuggingfacePaperContent(paperContent) {
       link = linkMatch[1];
     }
     
-    // Extract authors if available
+    // Extract authors if available - Updated patterns for modern HuggingFace HTML
     let authors = [];
-    const authorMatch = paperContent.match(/<[^>]*class="[^"]*author[^"]*"[^>]*>([^<]*)<\/[^>]*>/gi);
-    if (authorMatch) {
-      authors = authorMatch.map(match => match.replace(/<[^>]*>/g, '').trim()).filter(a => a);
+    
+    // Strategy 1: Look for button elements with author names (most reliable)
+    const authorButtonMatch = paperContent.match(/<button[^>]*class="[^"]*whitespace-nowrap[^"]*"[^>]*>([^<]+)<\/button>/gi);
+    if (authorButtonMatch) {
+      authors = authorButtonMatch.map(match => match.replace(/<[^>]*>/g, '').trim()).filter(a => a && a.length > 1);
+    }
+    
+    // Strategy 2: Look for elements with "author" class (fallback)
+    if (authors.length === 0) {
+      const authorMatch = paperContent.match(/<[^>]*class="[^"]*author[^"]*"[^>]*>([\s\S]*?)<\/[^>]*>/gi);
+      if (authorMatch) {
+        authors = authorMatch.map(match => {
+          // Extract text content, removing HTML tags
+          const textContent = match.replace(/<[^>]*>/g, '').trim();
+          // Remove commas and clean up
+          return textContent.replace(/,$/, '').trim();
+        }).filter(a => a && a.length > 1);
+      }
+    }
+    
+    // Strategy 3: Look for structured JSON data in the HTML (most reliable)
+    if (authors.length === 0) {
+      // Try to extract from the embedded JSON data in data-props
+      const jsonMatch = paperContent.match(/"authors":\s*\[([\s\S]*?)\]/);
+      if (jsonMatch) {
+        try {
+          const authorsJson = JSON.parse('[' + jsonMatch[1] + ']');
+          authors = authorsJson
+            .filter(author => author.name && !author.hidden)
+            .map(author => author.name.trim())
+            .filter(name => name && name.length > 1);
+        } catch (e) {
+          logger.debug('Failed to parse authors from JSON data:', e.message);
+        }
+      }
+    }
+    
+    // Strategy 4: Fallback - look for author names in text content
+    if (authors.length === 0) {
+      // Look for patterns that might be author names near "Authors:" text
+      const authorsSectionMatch = paperContent.match(/Authors:[\s\S]*?(?=<\/div>)/i);
+      if (authorsSectionMatch) {
+        const authorText = authorsSectionMatch[0];
+        // Extract names that look like author names (capitalized, multiple words)
+        const namePattern = /[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*/g;
+        const potentialNames = authorText.match(namePattern) || [];
+        authors = potentialNames.filter(name => 
+          name.length > 2 && 
+          !name.includes('Authors') && 
+          !name.includes('Published') &&
+          !name.includes('Submitted')
+        );
+      }
     }
     
     return {

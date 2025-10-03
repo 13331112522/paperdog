@@ -1,5 +1,50 @@
 import { formatDate } from './utils.js';
 
+// Helper function to sanitize Chinese translation content
+function sanitizeChineseContent(content) {
+  if (!content || typeof content !== 'string') {
+    return content;
+  }
+
+  // Try to parse if it looks like JSON
+  if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
+    try {
+      const parsed = JSON.parse(content);
+      // Extract meaningful text from JSON structures
+      if (typeof parsed === 'object') {
+        if (parsed.challenges && Array.isArray(parsed.challenges)) {
+          return parsed.challenges.join('；');
+        }
+        if (parsed.introduction && Array.isArray(parsed.introduction)) {
+          return parsed.introduction.join('；');
+        }
+        if (parsed.innovations && Array.isArray(parsed.innovations)) {
+          return parsed.innovations.join('；');
+        }
+        if (parsed.experiments && Array.isArray(parsed.experiments)) {
+          return parsed.experiments.join('；');
+        }
+        if (parsed.insights && Array.isArray(parsed.insights)) {
+          return parsed.insights.join('；');
+        }
+        // Handle single values
+        if (parsed.challenges) return parsed.challenges;
+        if (parsed.introduction) return parsed.introduction;
+        if (parsed.innovations) return parsed.innovations;
+        if (parsed.experiments) return parsed.experiments;
+        if (parsed.insights) return parsed.insights;
+
+        // Fallback: stringify the object nicely
+        return JSON.stringify(parsed, null, 2);
+      }
+    } catch (e) {
+      // If parsing fails, return original content
+    }
+  }
+
+  return content;
+}
+
 export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats = null) {
   const safeReportJson = JSON.stringify(dailyReport).replace(/</g, '\u003c');
   const visitorInfo = visitorStats || { today: '0', total: '0', displayText: 'Visitor stats' };
@@ -708,7 +753,7 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                     if (paper.analysis.chinese_abstract && paper.analysis.chinese_abstract.trim() && 
                         paper.analysis.chinese_abstract !== '英文内容不可用 / English content not available' &&
                         paper.analysis.chinese_abstract !== '翻译失败，请查看英文原文 / Translation failed, please see English original') {
-                        html += '<p>' + paper.analysis.chinese_abstract + '</p>';
+                        html += '<p>' + sanitizeChineseContent(paper.analysis.chinese_abstract) + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-0" role="alert">';
                         html += '<i class="fas fa-info-circle me-1"></i>已提供中文翻译';
                         html += '</div>';
@@ -771,7 +816,7 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                 if (analysis.introduction) {
                     if (analysis.chinese_introduction && analysis.chinese_introduction.trim()) {
                         html += '<h6>介绍 / Introduction</h6>';
-                        html += '<p>' + analysis.chinese_introduction + '</p>';
+                        html += '<p>' + sanitizeChineseContent(analysis.chinese_introduction) + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
                         html += '<i class="fas fa-check-circle me-1"></i>中文翻译已完成';
                         html += '</div>';
@@ -787,7 +832,7 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                 if (analysis.challenges) {
                     if (analysis.chinese_challenges && analysis.chinese_challenges.trim()) {
                         html += '<h6>挑战 / Challenges</h6>';
-                        html += '<p>' + analysis.chinese_challenges + '</p>';
+                        html += '<p>' + sanitizeChineseContent(analysis.chinese_challenges) + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
                         html += '<i class="fas fa-check-circle me-1"></i>中文翻译已完成';
                         html += '</div>';
@@ -803,7 +848,7 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                 if (analysis.innovations) {
                     if (analysis.chinese_innovations && analysis.chinese_innovations.trim()) {
                         html += '<h6>创新点 / Innovations</h6>';
-                        html += '<p>' + analysis.chinese_innovations + '</p>';
+                        html += '<p>' + sanitizeChineseContent(analysis.chinese_innovations) + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
                         html += '<i class="fas fa-check-circle me-1"></i>中文翻译已完成';
                         html += '</div>';
@@ -819,7 +864,7 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                 if (analysis.experiments) {
                     if (analysis.chinese_experiments && analysis.chinese_experiments.trim()) {
                         html += '<h6>实验与结果 / Experiments & Results</h6>';
-                        html += '<p>' + analysis.chinese_experiments + '</p>';
+                        html += '<p>' + sanitizeChineseContent(analysis.chinese_experiments) + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
                         html += '<i class="fas fa-check-circle me-1"></i>中文翻译已完成';
                         html += '</div>';
@@ -835,7 +880,7 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                 if (analysis.insights) {
                     if (analysis.chinese_insights && analysis.chinese_insights.trim()) {
                         html += '<h6>见解与未来方向 / Insights & Future Directions</h6>';
-                        html += '<p>' + analysis.chinese_insights + '</p>';
+                        html += '<p>' + sanitizeChineseContent(analysis.chinese_insights) + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
                         html += '<i class="fas fa-check-circle me-1"></i>中文翻译已完成';
                         html += '</div>';

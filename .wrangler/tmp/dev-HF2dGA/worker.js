@@ -9,7 +9,7 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// .wrangler/tmp/bundle-Fe8Gdo/checked-fetch.js
+// .wrangler/tmp/bundle-KstIoW/checked-fetch.js
 function checkURL(request, init) {
   const url = request instanceof URL ? request : new URL(
     (typeof request === "string" ? new Request(request, init) : request).url
@@ -27,7 +27,7 @@ function checkURL(request, init) {
 }
 var urls;
 var init_checked_fetch = __esm({
-  ".wrangler/tmp/bundle-Fe8Gdo/checked-fetch.js"() {
+  ".wrangler/tmp/bundle-KstIoW/checked-fetch.js"() {
     urls = /* @__PURE__ */ new Set();
     __name(checkURL, "checkURL");
     globalThis.fetch = new Proxy(globalThis.fetch, {
@@ -3704,11 +3704,11 @@ var init_archive_templates = __esm({
   }
 });
 
-// .wrangler/tmp/bundle-Fe8Gdo/middleware-loader.entry.ts
+// .wrangler/tmp/bundle-KstIoW/middleware-loader.entry.ts
 init_checked_fetch();
 init_modules_watch_stub();
 
-// .wrangler/tmp/bundle-Fe8Gdo/middleware-insertion-facade.js
+// .wrangler/tmp/bundle-KstIoW/middleware-insertion-facade.js
 init_checked_fetch();
 init_modules_watch_stub();
 
@@ -3742,6 +3742,37 @@ var logger = {
   warn: /* @__PURE__ */ __name((msg, data = {}) => console.warn(`[WARN] ${msg}`, data), "warn"),
   error: /* @__PURE__ */ __name((msg, data = {}) => console.error(`[ERROR] ${msg}`, data), "error")
 };
+function sanitizeJsonContent(content) {
+  if (!content || typeof content !== "string") {
+    return content;
+  }
+  if (content.trim().startsWith("{") || content.trim().startsWith("[")) {
+    try {
+      const parsed = JSON.parse(content);
+      if (typeof parsed === "object") {
+        if (parsed.abstract) return parsed.abstract;
+        if (parsed.description) return parsed.description;
+        if (parsed.summary) return parsed.summary;
+        if (parsed.text) return parsed.text;
+        if (parsed.challenges && Array.isArray(parsed.challenges)) {
+          return parsed.challenges.join(". ");
+        }
+        if (parsed.introduction) return parsed.introduction;
+        if (parsed.innovations) return parsed.innovations;
+        if (parsed.experiments) return parsed.experiments;
+        if (parsed.insights) return parsed.insights;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((item) => typeof item === "string").join(". ");
+        }
+        return JSON.stringify(parsed, null, 2);
+      }
+    } catch (e) {
+      logger.debug("Failed to parse JSON content, using original", { content: content.substring(0, 100) });
+    }
+  }
+  return content;
+}
+__name(sanitizeJsonContent, "sanitizeJsonContent");
 var CircuitBreaker = class {
   static {
     __name(this, "CircuitBreaker");
@@ -4380,11 +4411,11 @@ function parseHuggingfacePaperContent(paperContent) {
         ];
         for (const pattern of abstractPatterns) {
           const abstractMatch = paperContent.match(pattern);
-          if (abstractMatch) {
+          if (abstractMatch && abstractMatch[1]) {
             const content = abstractMatch[2] || abstractMatch[1];
             const cleanContent = content.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
             if (cleanContent.length > 10) {
-              return cleanContent;
+              return sanitizeJsonContent(cleanContent);
             }
           }
         }
@@ -4403,7 +4434,7 @@ function parseHuggingfacePaperContent(paperContent) {
           if (summaryMatch && summaryMatch[1]) {
             const content = summaryMatch[1].replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
             if (content.length > 10) {
-              return content;
+              return sanitizeJsonContent(content);
             }
           }
         }
@@ -4431,7 +4462,7 @@ function parseHuggingfacePaperContent(paperContent) {
             const content = match[1] || match[0].replace(/<[^>]*>/g, "");
             const cleanContent = content.replace(/\s+/g, " ").trim();
             if (cleanContent.length > 20) {
-              return cleanContent;
+              return sanitizeJsonContent(cleanContent);
             }
           }
         }
@@ -4821,26 +4852,41 @@ async function analyzePapers(papers, apiKey) {
   }
   logger2.info(`Starting analysis of ${papers.length} papers`);
   const analyzedPapers = [];
-  const BATCH_SIZE = 1;
+  const BATCH_SIZE = 3;
   for (let i = 0; i < papers.length; i += BATCH_SIZE) {
-    const paper = papers[i];
-    logger2.info(`Analyzing paper ${i + 1}/${papers.length}: ${paper.title.substring(0, 50)}...`);
-    try {
-      const analyzedPaper = await analyzeSinglePaper(paper, apiKey);
-      if (analyzedPaper) {
-        analyzedPapers.push(analyzedPaper);
-        logger2.info(`Successfully analyzed paper ${i + 1}/${papers.length}`);
+    const batch = papers.slice(i, i + BATCH_SIZE);
+    const batchStartIndex = i + 1;
+    const batchEndIndex = Math.min(i + BATCH_SIZE, papers.length);
+    logger2.info(`Processing batch ${Math.ceil(i / BATCH_SIZE) + 1}: papers ${batchStartIndex}-${batchEndIndex}`);
+    const batchPromises = batch.map(async (paper, batchIndex) => {
+      const paperIndex = i + batchIndex + 1;
+      try {
+        logger2.info(`Analyzing paper ${paperIndex}/${papers.length}: ${paper.title.substring(0, 50)}...`);
+        const analyzedPaper = await analyzeSinglePaper(paper, apiKey);
+        if (analyzedPaper) {
+          logger2.info(`Successfully analyzed paper ${paperIndex}/${papers.length}`);
+          return analyzedPaper;
+        }
+        return null;
+      } catch (error) {
+        logger2.error(`Failed to analyze paper ${paperIndex}/${papers.length}:`, {
+          error: error.message,
+          title: paper.title
+        });
+        return createFallbackAnalysis(paper);
       }
-    } catch (error) {
-      logger2.error(`Failed to analyze paper ${i + 1}/${papers.length}:`, {
-        error: error.message,
-        title: paper.title
-      });
-      analyzedPapers.push(createFallbackAnalysis(paper));
-    }
+    });
+    const batchResults = await Promise.allSettled(batchPromises);
+    batchResults.forEach((result, index) => {
+      if (result.status === "fulfilled" && result.value) {
+        analyzedPapers.push(result.value);
+      } else {
+        logger2.error(`Paper ${i + index + 1} failed or returned null`);
+      }
+    });
     if (i + BATCH_SIZE < papers.length) {
-      const delay = Math.min(3e3 + i * 500, 8e3);
-      logger2.debug(`Waiting ${delay}ms before next paper...`);
+      const delay = Math.min(1e3 + Math.ceil(i / BATCH_SIZE) * 200, 3e3);
+      logger2.debug(`Waiting ${delay}ms before next batch...`);
       await sleep(delay);
     }
   }
@@ -4926,7 +4972,7 @@ async function callLLM(prompt, model, params, apiKey) {
     response_format: { type: "json_object" }
   };
   const maxRetries = 3;
-  const baseTimeout = 12e4;
+  const baseTimeout = 3e4;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const timeout = baseTimeout * attempt;
@@ -5148,11 +5194,11 @@ async function applyFallbackTranslations(analysis, apiKey) {
     return;
   }
   logger2.info(`Applying fallback translations for ${translationsNeeded.length} fields`);
-  for (const pair of translationsNeeded) {
+  const translationPromises = translationsNeeded.map(async (pair) => {
     const englishContent = analysis[pair.english];
     if (!englishContent || englishContent.trim() === "" || englishContent.trim() === "Not provided") {
       analysis[pair.chinese] = "\u82F1\u6587\u5185\u5BB9\u4E0D\u53EF\u7528 / English content not available";
-      continue;
+      return { field: pair.chinese, success: true };
     }
     try {
       const translationPrompt = `\u8BF7\u5C06\u4EE5\u4E0B\u82F1\u6587\u5185\u5BB9\u7FFB\u8BD1\u6210\u7B80\u4F53\u4E2D\u6587\u3002\u7FFB\u8BD1\u5FC5\u987B\u51C6\u786E\u3001\u81EA\u7136\uFF0C\u9002\u5408AI\u7814\u7A76\u8005\u548C\u7231\u597D\u8005\u9605\u8BFB\u3002\u4FDD\u6301\u6280\u672F\u672F\u8BED\u7684\u4E13\u4E1A\u6027\uFF0C\u4F46\u89E3\u91CA\u590D\u6742\u6982\u5FF5\u65F6\u4F7F\u7528\u901A\u4FD7\u6613\u61C2\u7684\u8BED\u8A00\u3002
@@ -5168,11 +5214,20 @@ ${englishContent}
       }
       analysis[pair.chinese] = cleanTranslation;
       logger2.debug(`Successfully translated ${pair.promptKey} to Chinese`);
-      await sleep(500);
+      return { field: pair.chinese, success: true };
     } catch (translationError) {
       logger2.warn(`Failed to translate ${pair.promptKey}:`, translationError.message);
       analysis[pair.chinese] = `\u7FFB\u8BD1\u5931\u8D25\uFF0C\u8BF7\u67E5\u770B\u82F1\u6587\u539F\u6587 / Translation failed, please see English original`;
+      return { field: pair.chinese, success: false, error: translationError.message };
     }
+  });
+  const translationResults = await Promise.allSettled(translationPromises);
+  const successfulTranslations = translationResults.filter(
+    (r) => r.status === "fulfilled" && r.value?.success
+  ).length;
+  logger2.info(`Completed ${successfulTranslations}/${translationsNeeded.length} translations`);
+  if (translationsNeeded.length > 0) {
+    await sleep(200);
   }
   logger2.info("Fallback translations completed");
 }
@@ -6002,7 +6057,7 @@ function getDualColumnHTML(papers = [], dailyReport = null, visitorStats = null)
                     if (paper.analysis.chinese_abstract && paper.analysis.chinese_abstract.trim() && 
                         paper.analysis.chinese_abstract !== '\u82F1\u6587\u5185\u5BB9\u4E0D\u53EF\u7528 / English content not available' &&
                         paper.analysis.chinese_abstract !== '\u7FFB\u8BD1\u5931\u8D25\uFF0C\u8BF7\u67E5\u770B\u82F1\u6587\u539F\u6587 / Translation failed, please see English original') {
-                        html += '<p>' + paper.analysis.chinese_abstract + '</p>';
+                        html += '<p>' + sanitizeChineseContent(paper.analysis.chinese_abstract) + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-0" role="alert">';
                         html += '<i class="fas fa-info-circle me-1"></i>\u5DF2\u63D0\u4F9B\u4E2D\u6587\u7FFB\u8BD1';
                         html += '</div>';
@@ -6065,7 +6120,7 @@ function getDualColumnHTML(papers = [], dailyReport = null, visitorStats = null)
                 if (analysis.introduction) {
                     if (analysis.chinese_introduction && analysis.chinese_introduction.trim()) {
                         html += '<h6>\u4ECB\u7ECD / Introduction</h6>';
-                        html += '<p>' + analysis.chinese_introduction + '</p>';
+                        html += '<p>' + sanitizeChineseContent(analysis.chinese_introduction) + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
                         html += '<i class="fas fa-check-circle me-1"></i>\u4E2D\u6587\u7FFB\u8BD1\u5DF2\u5B8C\u6210';
                         html += '</div>';
@@ -6081,7 +6136,7 @@ function getDualColumnHTML(papers = [], dailyReport = null, visitorStats = null)
                 if (analysis.challenges) {
                     if (analysis.chinese_challenges && analysis.chinese_challenges.trim()) {
                         html += '<h6>\u6311\u6218 / Challenges</h6>';
-                        html += '<p>' + analysis.chinese_challenges + '</p>';
+                        html += '<p>' + sanitizeChineseContent(analysis.chinese_challenges) + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
                         html += '<i class="fas fa-check-circle me-1"></i>\u4E2D\u6587\u7FFB\u8BD1\u5DF2\u5B8C\u6210';
                         html += '</div>';
@@ -6097,7 +6152,7 @@ function getDualColumnHTML(papers = [], dailyReport = null, visitorStats = null)
                 if (analysis.innovations) {
                     if (analysis.chinese_innovations && analysis.chinese_innovations.trim()) {
                         html += '<h6>\u521B\u65B0\u70B9 / Innovations</h6>';
-                        html += '<p>' + analysis.chinese_innovations + '</p>';
+                        html += '<p>' + sanitizeChineseContent(analysis.chinese_innovations) + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
                         html += '<i class="fas fa-check-circle me-1"></i>\u4E2D\u6587\u7FFB\u8BD1\u5DF2\u5B8C\u6210';
                         html += '</div>';
@@ -6113,7 +6168,7 @@ function getDualColumnHTML(papers = [], dailyReport = null, visitorStats = null)
                 if (analysis.experiments) {
                     if (analysis.chinese_experiments && analysis.chinese_experiments.trim()) {
                         html += '<h6>\u5B9E\u9A8C\u4E0E\u7ED3\u679C / Experiments & Results</h6>';
-                        html += '<p>' + analysis.chinese_experiments + '</p>';
+                        html += '<p>' + sanitizeChineseContent(analysis.chinese_experiments) + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
                         html += '<i class="fas fa-check-circle me-1"></i>\u4E2D\u6587\u7FFB\u8BD1\u5DF2\u5B8C\u6210';
                         html += '</div>';
@@ -6129,7 +6184,7 @@ function getDualColumnHTML(papers = [], dailyReport = null, visitorStats = null)
                 if (analysis.insights) {
                     if (analysis.chinese_insights && analysis.chinese_insights.trim()) {
                         html += '<h6>\u89C1\u89E3\u4E0E\u672A\u6765\u65B9\u5411 / Insights & Future Directions</h6>';
-                        html += '<p>' + analysis.chinese_insights + '</p>';
+                        html += '<p>' + sanitizeChineseContent(analysis.chinese_insights) + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
                         html += '<i class="fas fa-check-circle me-1"></i>\u4E2D\u6587\u7FFB\u8BD1\u5DF2\u5B8C\u6210';
                         html += '</div>';
@@ -8481,7 +8536,7 @@ var jsonError = /* @__PURE__ */ __name(async (request, env, _ctx, middlewareCtx)
 }, "jsonError");
 var middleware_miniflare3_json_error_default = jsonError;
 
-// .wrangler/tmp/bundle-Fe8Gdo/middleware-insertion-facade.js
+// .wrangler/tmp/bundle-KstIoW/middleware-insertion-facade.js
 var __INTERNAL_WRANGLER_MIDDLEWARE__ = [
   middleware_ensure_req_body_drained_default,
   middleware_miniflare3_json_error_default
@@ -8515,7 +8570,7 @@ function __facade_invoke__(request, env, ctx, dispatch, finalMiddleware) {
 }
 __name(__facade_invoke__, "__facade_invoke__");
 
-// .wrangler/tmp/bundle-Fe8Gdo/middleware-loader.entry.ts
+// .wrangler/tmp/bundle-KstIoW/middleware-loader.entry.ts
 var __Facade_ScheduledController__ = class ___Facade_ScheduledController__ {
   constructor(scheduledTime, cron, noRetry) {
     this.scheduledTime = scheduledTime;

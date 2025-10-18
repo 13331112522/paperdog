@@ -22,6 +22,7 @@ import { generateDailyReport } from '../src/blog-generator.js';
 import { errorResponse, cachePapers } from '../src/utils.js';
 import { archivePapers } from '../src/archive-manager.js';
 import { debugUtils } from '../src/debug-utils.js';
+import { MCPServer, cleanupRateLimits } from '../src/mcp-server.js';
 
 // Handler mapping - direct function calls instead of eval
 const handlers = {
@@ -46,8 +47,16 @@ const handlers = {
   handleArchiveStatistics: archiveHandlers.handleArchiveStatistics,
   handleArchiveExport: archiveHandlers.handleArchiveExport,
   handleExportFormats: archiveHandlers.handleExportFormats,
-  handleCreateArchive: archiveHandlers.handleCreateArchive
+  handleCreateArchive: archiveHandlers.handleCreateArchive,
+  // MCP handlers (will be defined inline)
+  handleMCP: null,
+  handleMCPDiscovery: null,
+  handleForAIAgents: null,
+  handleAPIDocs: null
 };
+
+// MCP Server instance
+let mcpServer = null;
 
 // Main Fetch Handler
 export default {
@@ -56,20 +65,59 @@ export default {
       const url = new URL(request.url);
       const path = url.pathname;
       const method = request.method;
-      
+
+      // Initialize MCP server if needed
+      if (!mcpServer) {
+        mcpServer = new MCPServer(env);
+      }
+
       // Debug logging for Chrome DevTools
       debugUtils.debugLog('Incoming request', { method, path, url: request.url });
       
       // Handle OPTIONS preflight
       if (method === 'OPTIONS') {
         debugUtils.debugLog('Handling OPTIONS preflight request');
-        return new Response(null, { 
+        return new Response(null, {
           headers: {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type',
           }
         });
+      }
+
+      // Handle MCP routes (special handling)
+      if (path === '/mcp' && method === 'POST') {
+        debugUtils.debugLog('Handling MCP request');
+        const mcpResponse = await mcpServer.handleRequest(request);
+        return new Response(JSON.stringify(mcpResponse), {
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+          }
+        });
+      }
+
+      if (path === '/.well-known/mcp' && method === 'GET') {
+        debugUtils.debugLog('Handling MCP discovery request');
+        return await handleMCPDiscovery(request, env);
+      }
+
+      if (path === '/for-ai-agents' && method === 'GET') {
+        debugUtils.debugLog('Handling AI agents page request');
+        return await handleForAIAgents(request, env);
+      }
+
+      if (path === '/api/docs' && method === 'GET') {
+        debugUtils.debugLog('Handling API docs request');
+        return await handleAPIDocs(request, env);
+      }
+
+      if (path === '/ai-agents.txt' && method === 'GET') {
+        debugUtils.debugLog('Handling AI agents.txt request');
+        return await handleAIAgentsTxt(request, env);
       }
 
       // Route matching
@@ -214,15 +262,25 @@ export default {
       });
       
       console.log('📂 Category breakdown:', categories);
-      debugUtils.debugLog('Scheduled update completed', { 
-        date: today, 
-        processedPapers: analyzedPapers.length, 
-        categories 
+      debugUtils.debugLog('Scheduled update completed', {
+        date: today,
+        processedPapers: analyzedPapers.length,
+        categories
       });
-      
+
     } catch (error) {
       console.error('❌ Scheduled paper update failed:', error);
       debugUtils.debugLog('Scheduled update failed', { error: error.message });
+    }
+
+    // Cleanup MCP rate limits (run every hour)
+    try {
+      if (mcpServer) {
+        cleanupRateLimits(mcpServer);
+        debugUtils.debugLog('MCP rate limits cleaned up');
+      }
+    } catch (error) {
+      console.error('Rate limit cleanup failed:', error);
     }
   }
 };
@@ -311,5 +369,170 @@ async function handleReportByDate(request, env, date) {
   } catch (error) {
     console.error('Error in report handler:', error);
     return errorResponse(error.message, error.statusCode || 500);
+  }
+}
+
+// MCP Handler Functions
+async function handleMCPDiscovery(request, env) {
+  try {
+    const discoveryData = {
+      name: 'PaperDog MCP Server',
+      version: '1.0.0',
+      description: 'AI research paper discovery and analysis service via Model Context Protocol',
+      url: 'https://paperdog.org',
+      mcp_endpoint: 'https://paperdog.org/mcp',
+      capabilities: {
+        tools: [
+          'paperdog_search_papers',
+          'paperdog_get_daily_papers',
+          'paperdog_get_paper_details',
+          'paperdog_get_categories',
+          'paperdog_get_archive_papers'
+        ]
+      },
+      authentication: {
+        type: 'none',
+        description: 'No authentication required - rate limited by IP'
+      },
+      rate_limits: {
+        requests_per_hour: 100,
+        requests_per_day: 1000
+      },
+      documentation: {
+        api_docs: 'https://paperdog.org/api/docs',
+        agent_guide: 'https://paperdog.org/for-ai-agents'
+      },
+      contact: {
+        website: 'https://paperdog.org',
+        support: 'https://paperdog.org/about'
+      },
+      tags: [
+        'ai-research',
+        'machine-learning',
+        'arxiv',
+        'papers',
+        'research',
+        'academic',
+        'discovery'
+      ],
+      category: 'research-tools',
+      license: 'MIT',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: new Date().toISOString()
+    };
+
+    return new Response(JSON.stringify(discoveryData, null, 2), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      }
+    });
+  } catch (error) {
+    console.error('Error in MCP discovery handler:', error);
+    return errorResponse(error.message, 500);
+  }
+}
+
+async function handleForAIAgents(request, env) {
+  try {
+    const url = new URL(request.url);
+    const { getForAIAgentsHTML } = await import('../src/agent-pages.js');
+    const html = getForAIAgentsHTML(url.origin);
+
+    return new Response(html, {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      }
+    });
+  } catch (error) {
+    console.error('Error in AI agents handler:', error);
+    return errorResponse(error.message, 500);
+  }
+}
+
+async function handleAPIDocs(request, env) {
+  try {
+    const url = new URL(request.url);
+    const { getAPIDocsHTML } = await import('../src/agent-pages.js');
+    const html = getAPIDocsHTML(url.origin);
+
+    return new Response(html, {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      }
+    });
+  } catch (error) {
+    console.error('Error in API docs handler:', error);
+    return errorResponse(error.message, 500);
+  }
+}
+
+async function handleAIAgentsTxt(request, env) {
+  try {
+    const aiAgentsContent = `# AI Agents Discovery File
+# This file helps AI agents understand PaperDog's capabilities and integration points
+
+# Service Information
+User-agent: *
+Service: PaperDog Research Paper Discovery
+Description: AI research paper discovery and analysis service via Model Context Protocol
+Version: 1.0.0
+Provider: PaperDog Team
+Website: https://paperdog.org
+
+# MCP Integration
+MCP-Endpoint: https://paperdog.org/mcp
+MCP-Discovery: https://paperdog.org/.well-known/mcp
+Protocol: Model Context Protocol (MCP) 1.0
+Authentication: None (rate limited by IP)
+Rate-Limit: 100 requests per hour, 1000 per day
+
+# Available MCP Tools
+Tools: paperdog_search_papers, paperdog_get_daily_papers, paperdog_get_paper_details, paperdog_get_categories, paperdog_get_archive_papers
+
+# Data Sources
+Sources: arXiv.org, HuggingFace.co
+Data-Types: Research papers, AI analysis, citations, metadata
+Languages: English, Chinese
+Update-Frequency: Daily
+
+# API Documentation
+API-Docs: https://paperdog.org/api/docs
+Agent-Guide: https://paperdog.org/for-ai-agents
+REST-API: https://paperdog.org/api/
+
+# Integration Examples
+Claude-Integration: See https://paperdog.org/for-ai-agents
+ChatGPT-Plugin: See https://paperdog.org/for-ai-agents
+Custom-Integration: See https://paperdog.org/api/docs
+
+# Categories Supported
+Categories: computer_vision, machine_learning, natural_language_processing, reinforcement_learning, multimodal_learning, generative_models, diffusion_models, transformer_architectures, optimization, robotics, ethics_ai, datasets
+
+# Performance Metrics
+Uptime: 99.9%
+Average-Response-Time: <2 seconds
+Daily-Paper-Count: 10-15 curated papers
+Archive-Size: Growing daily archive`;
+
+    return new Response(aiAgentsContent, {
+      headers: {
+        'Content-Type': 'text/plain',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      }
+    });
+  } catch (error) {
+    console.error('Error in AI agents.txt handler:', error);
+    return errorResponse(error.message, 500);
   }
 }

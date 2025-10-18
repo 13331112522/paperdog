@@ -1,0 +1,76 @@
+# AI Agents Discovery File
+# This file helps AI agents understand PaperDog's capabilities and integration points
+
+# Service Information
+User-agent: *
+Service: PaperDog Research Paper Discovery
+Description: AI research paper discovery and analysis service via Model Context Protocol
+Version: 1.0.0
+Provider: PaperDog Team
+Website: https://paperdog.org
+
+# MCP Integration
+MCP-Endpoint: https://paperdog.org/mcp
+MCP-Discovery: https://paperdog.org/.well-known/mcp
+Protocol: Model Context Protocol (MCP) 1.0
+Authentication: None (rate limited by IP)
+Rate-Limit: 100 requests per hour, 1000 per day
+
+# Available MCP Tools
+Tools: paperdog_search_papers, paperdog_get_daily_papers, paperdog_get_paper_details, paperdog_get_categories, paperdog_get_archive_papers
+
+# Data Sources
+Sources: arXiv.org, HuggingFace.co
+Data-Types: Research papers, AI analysis, citations, metadata
+Languages: English, Chinese
+Update-Frequency: Daily
+
+# API Documentation
+API-Docs: https://paperdog.org/api/docs
+Agent-Guide: https://paperdog.org/for-ai-agents
+REST-API: https://paperdog.org/api/
+
+# Structured Data
+Structured-Data: https://paperdog.org (JSON-LD embedded)
+Schema-Types: WebApplication, Dataset, Service, WebSite
+
+# Contact & Support
+Contact: https://paperdog.org/about
+Support: Available through website
+Repository: https://github.com/paperdog/paperdog
+
+# Integration Examples
+Claude-Integration: See https://paperdog.org/for-ai-agents
+ChatGPT-Plugin: See https://paperdog.org/for-ai-agents
+Custom-Integration: See https://paperdog.org/api/docs
+
+# Technical Specifications
+Response-Format: JSON
+Content-Type: application/json
+Cache-Strategy: 5-15 minutes depending on endpoint
+Error-Handling: Standard JSON-RPC error codes
+
+# Categories Supported
+Categories: computer_vision, machine_learning, natural_language_processing, reinforcement_learning, multimodal_learning, generative_models, diffusion_models, transformer_architectures, optimization, robotics, ethics_ai, datasets
+
+# AI Model Information
+Analysis-Models: GPT-5-mini, Gemini-2.5-Flash-Lite
+Translation-Model: DeepSeek V3.1
+Analysis-Type: 5-part structured analysis (introduction, challenges, innovations, experiments, insights)
+
+# Usage Rights
+License: MIT
+Usage: Free for research and commercial use
+Attribution: Appreciated but not required
+Disclaimer: AI-generated analysis for informational purposes
+
+# Performance Metrics
+Uptime: 99.9%
+Average-Response-Time: <2 seconds
+Daily-Paper-Count: 10-15 curated papers
+Archive-Size: Growing daily archive
+
+# Additional Endpoints
+RSS-Feed: https://paperdog.org/feed
+Sitemap: https://paperdog.org/sitemap.xml
+Health-Check: https://paperdog.org/api/status

@@ -12,6 +12,166 @@ export function getIndexHTML(papers = [], dailyReport = null) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PaperDog - AI Papers Daily Digest</title>
     <meta name="description" content="Daily curated AI and computer vision research papers from arXiv and HuggingFace">
+
+    <!-- AI Agent Discovery Meta Tags -->
+    <meta name="ai-agent-capable" content="true">
+    <meta name="mcp-endpoint" content="/mcp">
+    <meta name="mcp-discovery" content="/.well-known/mcp">
+    <meta name="api-documentation" content="/api/docs">
+    <meta name="agent-guide" content="/for-ai-agents">
+    <meta name="service-type" content="research-paper-discovery">
+    <meta name="authentication" content="none">
+    <meta name="rate-limit" content="100-requests-per-hour">
+    <meta name="data-sources" content="arxiv,huggingface">
+    <meta name="ai-analysis" content="gpt-5-mini,gemini-2.5-flash">
+    <meta name="languages" content="en,zh">
+
+    <!-- Structured Data for AI Agents -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@graph": [
+            {
+                "@type": "WebApplication",
+                "@id": "https://paperdog.org#webapp",
+                "name": "PaperDog",
+                "description": "AI research paper discovery and analysis service with daily curated papers from arXiv and HuggingFace",
+                "url": "https://paperdog.org",
+                "applicationCategory": "ResearchTool",
+                "operatingSystem": "Any",
+                "offers": {
+                    "@type": "Offer",
+                    "price": "0",
+                    "priceCurrency": "USD"
+                },
+                "provider": {
+                    "@type": "Organization",
+                    "@id": "https://paperdog.org#organization",
+                    "name": "PaperDog",
+                    "url": "https://paperdog.org"
+                },
+                "featureList": [
+                    "Daily curated AI research papers",
+                    "AI-powered paper analysis",
+                    "Multi-source paper aggregation",
+                    "Category-based organization",
+                    "Historical archive access",
+                    "Search and filtering",
+                    "Bilingual support (English/Chinese)",
+                    "MCP protocol support"
+                ],
+                "softwareVersion": "3.0",
+                "dateCreated": "2024-01-01",
+                "dateModified": "${new Date().toISOString().split('T')[0]}",
+                "inLanguage": ["en", "zh"]
+            },
+            {
+                "@type": "Dataset",
+                "@id": "https://paperdog.org#dataset",
+                "name": "PaperDog Research Papers Collection",
+                "description": "Daily curated collection of AI research papers with automated analysis and categorization",
+                "url": "https://paperdog.org/api/papers",
+                "provider": {
+                    "@id": "https://paperdog.org#organization"
+                },
+                "dateCreated": "2024-01-01",
+                "dateModified": "${new Date().toISOString().split('T')[0]}",
+                "datePublished": "${new Date().toISOString().split('T')[0]}",
+                "inLanguage": ["en", "zh"],
+                "keywords": ["artificial intelligence", "machine learning", "computer vision", "natural language processing", "research papers"],
+                "license": "https://opensource.org/licenses/MIT",
+                "distribution": [
+                    {
+                        "@type": "DataDownload",
+                        "encodingFormat": "application/json",
+                        "contentUrl": "https://paperdog.org/api/papers"
+                    },
+                    {
+                        "@type": "DataDownload",
+                        "encodingFormat": "application/rss+xml",
+                        "contentUrl": "https://paperdog.org/feed"
+                    }
+                ]
+            },
+            {
+                "@type": "Service",
+                "@id": "https://paperdog.org#service",
+                "name": "PaperDog MCP Service",
+                "description": "Model Context Protocol service for AI research paper discovery and analysis",
+                "url": "https://paperdog.org/mcp",
+                "provider": {
+                    "@id": "https://paperdog.org#organization"
+                },
+                "serviceType": "ResearchTool",
+                "areaServed": "World",
+                "hasOfferCatalog": {
+                    "@type": "OfferCatalog",
+                    "name": "PaperDog MCP Tools",
+                    "itemListElement": [
+                        {
+                            "@type": "Offer",
+                            "name": "paperdog_search_papers",
+                            "description": "Search across arXiv and HuggingFace papers with advanced filtering"
+                        },
+                        {
+                            "@type": "Offer",
+                            "name": "paperdog_get_daily_papers",
+                            "description": "Get curated daily papers with AI analysis"
+                        },
+                        {
+                            "@type": "Offer",
+                            "name": "paperdog_get_paper_details",
+                            "description": "Get detailed paper information including full analysis"
+                        },
+                        {
+                            "@type": "Offer",
+                            "name": "paperdog_get_categories",
+                            "description": "Get all available research categories"
+                        },
+                        {
+                            "@type": "Offer",
+                            "name": "paperdog_get_archive_papers",
+                            "description": "Access historical paper archives"
+                        }
+                    ]
+                }
+            },
+            {
+                "@type": "WebSite",
+                "@id": "https://paperdog.org#website",
+                "name": "PaperDog",
+                "url": "https://paperdog.org",
+                "description": "Daily AI research papers with automated analysis and insights",
+                "inLanguage": ["en", "zh"],
+                "publisher": {
+                    "@id": "https://paperdog.org#organization"
+                },
+                "potentialAction": [
+                    {
+                        "@type": "SearchAction",
+                        "target": {
+                            "@type": "EntryPoint",
+                            "urlTemplate": "https://paperdog.org/api/search?q={search_term_string}"
+                        },
+                        "query-input": "required name=search_term_string"
+                    },
+                    {
+                        "@type": "ReadAction",
+                        "target": {
+                            "@type": "EntryPoint",
+                            "urlTemplate": "https://paperdog.org/api/papers/{date}"
+                        },
+                        "object": {
+                            "@type": "Article",
+                            "name": "Daily AI Papers"
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+    </script>
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>

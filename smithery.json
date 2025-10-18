@@ -1,0 +1,175 @@
+{
+  "name": "paperdog-mcp",
+  "displayName": "PaperDog - AI Research Papers",
+  "description": "Access thousands of AI research papers with intelligent analysis and translations via Model Context Protocol",
+  "version": "1.0.0",
+  "author": "PaperDog Team",
+  "license": "MIT",
+  "homepage": "https://paperdog.org",
+  "repository": "https://github.com/paperdog/paperdog",
+  "keywords": [
+    "ai",
+    "research",
+    "papers",
+    "arxiv",
+    "machine-learning",
+    "computer-vision",
+    "nlp",
+    "discovery",
+    "analysis",
+    "academic"
+  ],
+
+  "mcp": {
+    "server": {
+      "command": "curl",
+      "args": [
+        "-X", "POST",
+        "https://paperdog.org/mcp",
+        "-H", "Content-Type: application/json",
+        "-d", "@-"
+      ],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  },
+
+  "capabilities": {
+    "tools": true,
+    "logging": false
+  },
+
+  "tools": [
+    {
+      "name": "paperdog_search_papers",
+      "description": "Search AI research papers from arXiv and HuggingFace with advanced filtering",
+      "category": "research",
+      "tags": ["search", "papers", "arxiv", "huggingface"],
+      "examples": [
+        "Search for papers about transformer architectures",
+        "Find recent computer vision papers with high relevance scores",
+        "Look for machine learning papers published in the last week"
+      ]
+    },
+    {
+      "name": "paperdog_get_daily_papers",
+      "description": "Get today's curated AI papers with comprehensive analysis",
+      "category": "research",
+      "tags": ["daily", "curated", "analysis", "papers"],
+      "examples": [
+        "Show me today's top AI research papers",
+        "Get daily papers about natural language processing",
+        "What are the latest breakthrough papers today?"
+      ]
+    },
+    {
+      "name": "paperdog_get_paper_details",
+      "description": "Get detailed information about a specific paper including full AI analysis",
+      "category": "research",
+      "tags": ["details", "analysis", "specific", "paper"],
+      "examples": [
+        "Get detailed analysis of paper with ID 12345",
+        "Show me the full analysis for this transformer paper",
+        "What are the key innovations in this specific paper?"
+      ]
+    },
+    {
+      "name": "paperdog_get_categories",
+      "description": "Get all available research categories and their statistics",
+      "category": "metadata",
+      "tags": ["categories", "research", "fields", "statistics"],
+      "examples": [
+        "What research categories are available?",
+        "Show me all AI research fields",
+        "Get statistics for different research areas"
+      ]
+    },
+    {
+      "name": "paperdog_get_archive_papers",
+      "description": "Access historical paper archives with advanced search and filtering",
+      "category": "research",
+      "tags": ["archive", "historical", "search", "papers"],
+      "examples": [
+        "Find papers from last month about computer vision",
+        "Search the archive for reinforcement learning papers",
+        "Get historical papers in the machine learning category"
+      ]
+    }
+  ],
+
+  "authentication": {
+    "type": "none",
+    "description": "No authentication required - rate limited by IP address",
+    "rateLimits": {
+      "requestsPerHour": 100,
+      "requestsPerDay": 1000
+    }
+  },
+
+  "documentation": {
+    "readme": "https://paperdog.org/for-ai-agents",
+    "apiReference": "https://paperdog.org/api/docs",
+    "examples": "https://paperdog.org/for-ai-agents#integration-examples",
+    "support": "https://paperdog.org/about"
+  },
+
+  "metadata": {
+    "dataSources": [
+      {
+        "name": "arXiv",
+        "description": "Open access preprint repository for scientific papers",
+        "url": "https://arxiv.org"
+      },
+      {
+        "name": "HuggingFace",
+        "description": "Open-source ML community and model hub",
+        "url": "https://huggingface.co"
+      }
+    ],
+    "aiAnalysis": {
+      "models": ["GPT-5-mini", "Gemini-2.5-Flash-Lite"],
+      "analysisType": "5-part structured analysis",
+      "languages": ["English", "Chinese"]
+    },
+    "updateFrequency": "Daily",
+    "paperCount": "10-15 curated papers per day",
+    "archiveSize": "Growing daily archive"
+  },
+
+  "integration": {
+    "supportedPlatforms": [
+      "Claude",
+      "ChatGPT",
+      "Custom MCP clients"
+    ],
+    "discoveryEndpoint": "https://paperdog.org/.well-known/mcp",
+    "healthCheck": "https://paperdog.org/api/status"
+  },
+
+  "changelog": {
+    "1.0.0": {
+      "date": "2024-01-01",
+      "changes": [
+        "Initial MCP implementation",
+        "Core paper discovery tools",
+        "AI-powered paper analysis",
+        "Historical archive access",
+        "Agent-friendly documentation"
+      ]
+    }
+  },
+
+  "support": {
+    "contact": "https://paperdog.org/about",
+    "issues": "https://github.com/paperdog/paperdog/issues",
+    "community": "https://github.com/paperdog/paperdog/discussions"
+  },
+
+  "ratings": {
+    "quality": 5,
+    "reliability": 5,
+    "documentation": 5,
+    "support": 4
+  }
+}

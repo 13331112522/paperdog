@@ -37,6 +37,12 @@ export const routes = {
   'POST /api/archive/create': 'handleCreateArchive',
   'GET /archive': 'handleArchivePage',
   'POST /api/translate': 'handleTranslate',
+  // MCP routes
+  'POST /mcp': 'handleMCP',
+  'GET /.well-known/mcp': 'handleMCPDiscovery',
+  'GET /for-ai-agents': 'handleForAIAgents',
+  'GET /api/docs': 'handleAPIDocs',
+  'GET /ai-agents.txt': 'handleAIAgentsTxt',
 };
 
 // Paper sources configuration

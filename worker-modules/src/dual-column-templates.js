@@ -375,6 +375,55 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
     </div>
 
     <script>
+        // Helper function to sanitize Chinese translation content
+        function sanitizeChineseContent(content) {
+            if (!content || typeof content !== 'string') {
+                return content;
+            }
+
+            // Try to parse if it looks like JSON
+            if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
+                try {
+                    const parsed = JSON.parse(content);
+                    // Extract meaningful text from JSON structures
+                    if (typeof parsed === 'object') {
+                        // Handle various possible field names for translations
+                        const translationFields = [
+                            'translation', 'chinese_translation', 'experiments_translation',
+                            'challenges', 'introduction', 'innovations', 'experiments', 'insights',
+                            'chinese_challenges', 'chinese_introduction', 'chinese_innovations',
+                            'chinese_experiments', 'chinese_insights', 'chinese_abstract'
+                        ];
+
+                        for (const field of translationFields) {
+                            if (parsed[field]) {
+                                if (Array.isArray(parsed[field])) {
+                                    return parsed[field].join('；');
+                                }
+                                return parsed[field];
+                            }
+                        }
+
+                        // Fallback: find first string value in the object
+                        for (const key in parsed) {
+                            if (parsed[key]) {
+                                if (Array.isArray(parsed[key])) {
+                                    return parsed[key].join('；');
+                                }
+                                if (typeof parsed[key] === 'string' && parsed[key].trim()) {
+                                    return parsed[key];
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // If parsing fails, return original content
+                }
+            }
+
+            return content;
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             const report = ${safeReportJson};
             
@@ -493,18 +542,64 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
             window.currentPapers = papers;
         }
         
-        function loadPaperContent(index) {
+        async function loadPaperContent(index) {
             const paper = window.currentPapers[index];
             if (!paper) return;
-            
-            // Load paper details
-            const paperContent = generatePaperDetails(paper);
+
+            window.currentPaperIndex = index;
+
+            // Track view when paper is selected
+            if (paper.id) {
+                trackPaperView(paper.id);
+            }
+
+            // If switching to Chinese and translations are not available, fetch them
+            if (currentLanguage === 'zh' && paper.analysis) {
+                const hasTranslations = paper.analysis.chinese_abstract ||
+                                      paper.analysis.chinese_introduction ||
+                                      paper.analysis.chinese_challenges ||
+                                      paper.analysis.chinese_innovations ||
+                                      paper.analysis.chinese_experiments ||
+                                      paper.analysis.chinese_insights;
+
+                if (!hasTranslations) {
+                    // Show loading state for both columns
+                    const loadingContent = \`<div class="text-center py-5">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-3 text-muted">正在生成中文翻译...</p>
+                        </div>\`;
+                    document.getElementById('analysis-content').innerHTML = loadingContent;
+                    document.getElementById('paper-content').innerHTML = loadingContent;
+
+                    // Fetch translations
+                    const translations = await fetchTranslations(paper);
+
+                    // Merge translations into paper analysis
+                    if (translations) {
+                        paper.analysis = { ...paper.analysis, ...translations };
+                    }
+
+                    // Re-render both columns after translations are available
+                    const paperContent = generateTranslatedPaperDetails(paper);
+                    document.getElementById('paper-content').innerHTML = paperContent;
+
+                    const analysisContent = generateTranslatedAIAnalysis(paper);
+                    document.getElementById('analysis-content').innerHTML = analysisContent;
+
+                    return; // Exit early to avoid double rendering
+                }
+            }
+
+            // Load paper details with translation
+            const paperContent = generateTranslatedPaperDetails(paper);
             document.getElementById('paper-content').innerHTML = paperContent;
-            
-            // Load AI analysis
-            const analysisContent = generateAIAnalysis(paper);
+
+            // Load AI analysis with translation
+            const analysisContent = generateTranslatedAIAnalysis(paper);
             document.getElementById('analysis-content').innerHTML = analysisContent;
-            
+
             // Highlight selected paper
             document.querySelectorAll('.paper-card').forEach((card, i) => {
                 if (i === index) {
@@ -706,7 +801,7 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
         // Translation functionality
         let currentLanguage = 'en'; // Default to English
 
-        function toggleTranslation() {
+        async function toggleTranslation() {
             currentLanguage = currentLanguage === 'en' ? 'zh' : 'en';
 
             // Update button text with bilingual display
@@ -725,7 +820,7 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
 
             // Reload current paper if one is selected
             if (window.currentPaperIndex !== undefined) {
-                loadPaperContent(window.currentPaperIndex);
+                await loadPaperContent(window.currentPaperIndex);
             }
         }
 
@@ -929,37 +1024,37 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
             return generateAIAnalysis(paper);
         }
 
-        // Override the loadPaperContent function to support translation
-        window.currentPaperIndex = undefined;
-
-        function loadPaperContent(index) {
-            const paper = window.currentPapers[index];
-            if (!paper) return;
-
-            window.currentPaperIndex = index;
-
-            // Track view when paper is selected
-            if (paper.id) {
-                trackPaperView(paper.id);
+        // Function to fetch translations for a paper
+        async function fetchTranslations(paper) {
+            if (!paper.analysis) {
+                return {};
             }
 
-            // Load paper details with translation
-            const paperContent = generateTranslatedPaperDetails(paper);
-            document.getElementById('paper-content').innerHTML = paperContent;
+            try {
+                const response = await fetch('/api/translate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        analysis: paper.analysis,
+                        abstract: paper.abstract
+                    })
+                });
 
-            // Load AI analysis with translation
-            const analysisContent = generateTranslatedAIAnalysis(paper);
-            document.getElementById('analysis-content').innerHTML = analysisContent;
-
-            // Highlight selected paper
-            document.querySelectorAll('.paper-card').forEach((card, i) => {
-                if (i === index) {
-                    card.classList.add('border-primary', 'bg-light');
-                } else {
-                    card.classList.remove('border-primary', 'bg-light');
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success && result.translations) {
+                        return result.translations;
+                    }
                 }
-            });
+            } catch (error) {
+                console.error('Failed to fetch translations:', error);
+            }
+
+            return {};
         }
+
     </script>
 </body>
 </html>`;

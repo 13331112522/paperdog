@@ -36,6 +36,7 @@ export const routes = {
   'GET /api/archive/export/formats': 'handleExportFormats',
   'POST /api/archive/create': 'handleCreateArchive',
   'GET /archive': 'handleArchivePage',
+  'POST /api/translate': 'handleTranslate',
 };
 
 // Paper sources configuration
@@ -156,9 +157,6 @@ DO NOT MAKE ANYTHING UP. If the information is not in the paper, say "Not specif
     * Suggest 1-2 *potential* broader applications or real-world implications.
     * End with a forward-looking statement or question to spark discussion.
     * Example: "Inspires exploration into [New Area]. Could this revolutionize [Application]? "
-     
-
-**IMPORTANT: You MUST provide complete Chinese translations for ALL sections. The Chinese translations should be accurate, natural, and suitable for Chinese-speaking AI researchers and enthusiasts. Use proper Simplified Chinese. Do not translate emojis or section numbers. Make sure each Chinese translation is comprehensive and covers the same key points as the English version.**
 
 **Format your response as a valid JSON object:**
 {
@@ -170,13 +168,7 @@ DO NOT MAKE ANYTHING UP. If the information is not in the paper, say "Not specif
   "keywords": ["term1", "term2", ...],
   "category": "one_of_topic_categories",
   "relevance_score": (1-10),
-  "technical_depth": "beginner|intermediate|advanced",
-  "chinese_abstract": "🚀中文摘要：完整的中文摘要，涵盖论文的主要贡献、创新点和背景。必须使用简体中文，确保翻译准确自然。",
-  "chinese_introduction": "🚀中文介绍：完整的中文介绍，包括研究背景、动机和核心思想。必须使用简体中文，确保翻译准确自然。",
-  "chinese_challenges": "🎯中文挑战：完整的中文挑战描述，列出主要技术问题。使用 bullet points 或列表。必须使用简体中文，确保翻译准确自然。",
-  "chinese_innovations": "✨中文创新：完整的中文创新描述，突出新方法和技术贡献。使用 bullet points 或列表。必须使用简体中文，确保翻译准确自然。",
-  "chinese_experiments": "📊中文实验：完整的中文实验描述，包括设置、结果和突破。必须使用简体中文，确保翻译准确自然。",
-  "chinese_insights": "🤔中文见解：完整的中文见解描述，包括领域意义和未来方向。必须使用简体中文，确保翻译准确自然。"
+  "technical_depth": "beginner|intermediate|advanced"
 }`;
 
 // RSS feed configuration

@@ -48,8 +48,6 @@ Generate 5 distinct text blocks in English. Use formatting suitable for Twitter 
    * Discuss potential broader implications of this research direction.
    * Suggest future work or applications that could follow from this research.
 
-**IMPORTANT: You MUST provide complete Chinese translations for ALL sections. The Chinese translations should be accurate, natural, and suitable for Chinese-speaking AI researchers and enthusiasts. Use proper Simplified Chinese. Do not translate emojis or section numbers.**
-
 **Format your response as a valid JSON object:**
 {
   "introduction": "🚀 English introduction text...",
@@ -60,13 +58,7 @@ Generate 5 distinct text blocks in English. Use formatting suitable for Twitter 
   "keywords": ["term1", "term2", ...],
   "category": "one_of_topic_categories",
   "relevance_score": (1-10),
-  "technical_depth": "beginner|intermediate|advanced",
-  "chinese_abstract": "🚀中文摘要：基于标题推断的中文摘要...",
-  "chinese_introduction": "🚀中文介绍：完整的中文介绍...",
-  "chinese_challenges": "🎯中文挑战：完整的中文挑战描述...",
-  "chinese_innovations": "✨中文创新：完整的中文创新描述...",
-  "chinese_experiments": "📊中文实验：完整的中文实验描述...",
-  "chinese_insights": "🤔中文见解：完整的中文见解描述..."
+  "technical_depth": "beginner|intermediate|advanced"
 }`;
 }
 
@@ -532,17 +524,6 @@ async function parseAnalysisResponse(response, apiKey) {
       }
     }
 
-    // Validate Chinese fields if available
-    const chineseFields = ['chinese_abstract', 'chinese_introduction', 'chinese_challenges', 'chinese_innovations', 'chinese_experiments', 'chinese_insights'];
-    for (const field of chineseFields) {
-      if (!parsed[field] || parsed[field].trim() === '') {
-        logger.warn(`Missing Chinese field in analysis: ${field}, will generate fallback.`);
-        parsed[field] = ''; // Set to empty string for fallback translation
-      }
-    }
-
-    // Apply fallback translations if Chinese fields are empty but English content exists
-    await applyFallbackTranslations(parsed, apiKey);
 
     // Normalize and validate category
     parsed.category = normalizeCategory(parsed.category);
@@ -575,7 +556,8 @@ async function parseAnalysisResponse(response, apiKey) {
   }
 }
 
-async function applyFallbackTranslations(analysis, apiKey) {
+// New on-demand translation function
+export async function translateAnalysis(analysis, apiKey, abstract = null) {
   const translationPairs = [
     { english: 'abstract', chinese: 'chinese_abstract', promptKey: 'abstract' },
     { english: 'introduction', chinese: 'chinese_introduction', promptKey: 'introduction' },
@@ -585,27 +567,26 @@ async function applyFallbackTranslations(analysis, apiKey) {
     { english: 'insights', chinese: 'chinese_insights', promptKey: 'insights' }
   ];
 
-  const translationsNeeded = translationPairs.filter(pair => 
-    !analysis[pair.chinese] || analysis[pair.chinese].trim() === '' ||
-    analysis[pair.chinese].trim() === 'Not specified in the paper.'
+  // Include abstract in the data to be translated
+  const dataToTranslate = { ...analysis };
+  if (abstract && abstract.trim() && abstract.trim() !== 'Not provided') {
+    dataToTranslate.abstract = abstract;
+  }
+
+  const translationsNeeded = translationPairs.filter(pair =>
+    dataToTranslate[pair.english] && dataToTranslate[pair.english].trim() !== '' && dataToTranslate[pair.english].trim() !== 'Not provided'
   );
 
   if (translationsNeeded.length === 0) {
-    logger.debug('All Chinese translations are present, no fallback needed');
-    return;
+    logger.warn('No content available for translation');
+    throw new AppError('No content available for translation');
   }
 
-  logger.info(`Applying fallback translations for ${translationsNeeded.length} fields`);
+  logger.info(`Starting translation for ${translationsNeeded.length} fields`);
 
   // Process translations concurrently for better performance
   const translationPromises = translationsNeeded.map(async (pair) => {
-    const englishContent = analysis[pair.english];
-
-    // Skip if English content is empty or "Not provided"
-    if (!englishContent || englishContent.trim() === '' || englishContent.trim() === 'Not provided') {
-      analysis[pair.chinese] = '英文内容不可用 / English content not available';
-      return { field: pair.chinese, success: true };
-    }
+    const englishContent = dataToTranslate[pair.english];
 
     try {
       const translationPrompt = `请将以下英文内容翻译成简体中文。翻译必须准确、自然，适合AI研究者和爱好者阅读。保持技术术语的专业性，但解释复杂概念时使用通俗易懂的语言。
@@ -623,33 +604,38 @@ ${englishContent}
         cleanTranslation = cleanTranslation.replace(/```[\w]*\n?/, '').replace(/\n?```$/, '');
       }
 
-      analysis[pair.chinese] = cleanTranslation;
       logger.debug(`Successfully translated ${pair.promptKey} to Chinese`);
-      return { field: pair.chinese, success: true };
+      return { field: pair.chinese, content: cleanTranslation, success: true };
 
     } catch (translationError) {
       logger.warn(`Failed to translate ${pair.promptKey}:`, translationError.message);
-      analysis[pair.chinese] = `翻译失败，请查看英文原文 / Translation failed, please see English original`;
-      return { field: pair.chinese, success: false, error: translationError.message };
+      return {
+        field: pair.chinese,
+        content: `翻译失败，请查看英文原文 / Translation failed, please see English original`,
+        success: false,
+        error: translationError.message
+      };
     }
   });
 
   // Wait for all translations to complete
   const translationResults = await Promise.allSettled(translationPromises);
 
-  // Log results
+  // Collect results
+  const translations = {};
   const successfulTranslations = translationResults.filter(r =>
     r.status === 'fulfilled' && r.value?.success
   ).length;
 
+  translationResults.forEach(result => {
+    if (result.status === 'fulfilled' && result.value) {
+      translations[result.value.field] = result.value.content;
+    }
+  });
+
   logger.info(`Completed ${successfulTranslations}/${translationsNeeded.length} translations`);
 
-  // Small delay after concurrent translations to avoid rate limiting
-  if (translationsNeeded.length > 0) {
-    await sleep(200);
-  }
-
-  logger.info('Fallback translations completed');
+  return translations;
 }
 
 function generateSummary(analysis) {

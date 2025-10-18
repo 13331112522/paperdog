@@ -12,7 +12,8 @@ import {
   handleAbout,
   handleScoringReport,
   handleTrackPaperView,
-  handleArchivePage
+  handleArchivePage,
+  handleTranslate
 } from '../src/handlers.js';
 import { archiveHandlers } from '../src/archive-handlers.js';
 import { scrapeDailyPapers } from '../src/paper-scraper.js';
@@ -20,6 +21,7 @@ import { analyzePapers } from '../src/paper-analyzer.js';
 import { generateDailyReport } from '../src/blog-generator.js';
 import { errorResponse, cachePapers } from '../src/utils.js';
 import { archivePapers } from '../src/archive-manager.js';
+import { debugUtils } from '../src/debug-utils.js';
 
 // Handler mapping - direct function calls instead of eval
 const handlers = {
@@ -35,6 +37,7 @@ const handlers = {
   handleScoringReport,
   handleTrackPaperView,
   handleArchivePage,
+  handleTranslate,
   // Archive handlers
   handleArchiveDates: archiveHandlers.handleArchiveDates,
   handleArchiveByDate: archiveHandlers.handleArchiveByDate,
@@ -54,8 +57,12 @@ export default {
       const path = url.pathname;
       const method = request.method;
       
+      // Debug logging for Chrome DevTools
+      debugUtils.debugLog('Incoming request', { method, path, url: request.url });
+      
       // Handle OPTIONS preflight
       if (method === 'OPTIONS') {
+        debugUtils.debugLog('Handling OPTIONS preflight request');
         return new Response(null, { 
           headers: {
             'Access-Control-Allow-Origin': '*',
@@ -85,6 +92,7 @@ export default {
                 }
               }
               if (match && paramValue) {
+                debugUtils.debugLog('Route matched with parameter', { pattern, handlerName, paramValue });
                 // Call handler directly using handler mapping
                 const handler = handlers[handlerName];
                 if (handler) {
@@ -93,6 +101,7 @@ export default {
               }
             }
           } else if (path === routePath) {
+            debugUtils.debugLog('Route matched', { path, handlerName });
             // Call handler directly using handler mapping
             const handler = handlers[handlerName];
             if (handler) {
@@ -130,32 +139,42 @@ export default {
       const today = new Date().toISOString().split('T')[0];
       console.log(`🔄 Starting daily paper update for ${today}`);
       
+      // Debug logging for Chrome DevTools
+      debugUtils.debugLog('Starting scheduled paper update', { date: today });
+      
       // Step 1: Scrape papers
       console.log('📡 Scraping papers from sources...');
       const scrapedPapers = await scrapeDailyPapers();
       if (scrapedPapers.length === 0) {
         console.error('❌ No papers could be scraped from sources');
+        debugUtils.debugLog('No papers scraped', { error: 'No papers found' });
         return;
       }
       
       console.log(`✅ Scraped ${scrapedPapers.length} papers`);
+      debugUtils.debugLog('Papers scraped successfully', { count: scrapedPapers.length });
       
       // Step 2: Analyze papers
       console.log('🧠 Analyzing papers with AI...');
+      debugUtils.debugLog('Starting paper analysis', { paperCount: scrapedPapers.length });
       const analyzedPapers = await analyzePapers(scrapedPapers, apiKey);
       
       console.log(`✅ Analyzed ${analyzedPapers.length} papers`);
+      debugUtils.debugLog('Papers analyzed successfully', { count: analyzedPapers.length });
       
       // Step 3: Cache results
       console.log('💾 Caching results...');
+      debugUtils.debugLog('Caching papers', { date: today, count: analyzedPapers.length });
       await cachePapers(today, analyzedPapers, env);
 
       // Step 4: Generate daily report
       console.log('📊 Generating daily report...');
+      debugUtils.debugLog('Generating daily report', { date: today });
       const dailyReport = await generateDailyReport(analyzedPapers, today);
 
       // Step 5: Archive top 10 papers for long-term storage
       console.log('📦 Archiving top 10 papers for long-term storage...');
+      debugUtils.debugLog('Starting paper archiving', { date: today });
       try {
         // Sort papers by relevance score and take top 10 for archiving
         const topPapers = [...analyzedPapers]
@@ -173,8 +192,14 @@ export default {
           total_papers_analyzed: analyzedPapers.length
         });
         console.log(`✅ Successfully archived ${archiveResult.papers_archived} top papers for ${today} (from ${analyzedPapers.length} total)`);
+        debugUtils.debugLog('Papers archived successfully', { 
+          date: today, 
+          archivedCount: archiveResult.papers_archived, 
+          totalCount: analyzedPapers.length 
+        });
       } catch (archiveError) {
         console.warn('⚠️ Failed to archive papers:', archiveError.message);
+        debugUtils.debugLog('Paper archiving failed', { error: archiveError.message });
         // Don't fail the entire update if archiving fails
       }
 
@@ -189,9 +214,15 @@ export default {
       });
       
       console.log('📂 Category breakdown:', categories);
+      debugUtils.debugLog('Scheduled update completed', { 
+        date: today, 
+        processedPapers: analyzedPapers.length, 
+        categories 
+      });
       
     } catch (error) {
       console.error('❌ Scheduled paper update failed:', error);
+      debugUtils.debugLog('Scheduled update failed', { error: error.message });
     }
   }
 };

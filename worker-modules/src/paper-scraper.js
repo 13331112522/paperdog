@@ -18,155 +18,204 @@ const logger = {
   error: (msg, data = {}) => console.error(`[ERROR] ${msg}`, data)
 };
 
-// JSON content sanitization for abstracts and translations
+// Enhanced JSON content sanitization for abstracts and translations
 function sanitizeJsonContent(content) {
   if (!content || typeof content !== 'string') {
     return content;
   }
 
-  // Handle HuggingFace JSON metadata contamination - look for specific patterns
-  if (content.includes('":"') || content.includes('_id') || content.includes('updatedAt') || content.includes('"paper":')) {
-    logger.debug('Detected JSON metadata contamination, cleaning abstract...');
+  // Pre-processing: normalize whitespace and remove obvious junk
+  content = content.replace(/\s+/g, ' ').trim();
 
-    // Strategy 1: Find the actual abstract before JSON metadata starts
-    // Look for common JSON start patterns
-    const jsonStartPatterns = [
-      '","updatedAt',
-      '","_id',
-      '"paper":',
-      '"authors":',
-      '"organization":',
+  // Early detection of JSON contamination - be more aggressive
+  const contaminationPatterns = [
+    '":"',
+    '_id',
+    'updatedAt',
+    '"paper":',
+    '"authors":',
+    '"organization":',
+    'canRead',
+    'dailyPaperRank',
+    'acceptLanguages',
+    'upvoters',
+    'discussionId',
+    'ai_summary',
+    'ai_keywords',
+    'githubStars',
+    '{"',
+    '["',
+    '":{',
+    '":['
+  ];
+
+  const hasContamination = contaminationPatterns.some(pattern => content.includes(pattern));
+
+  if (hasContamination) {
+    logger.debug('Detected JSON metadata contamination, applying aggressive cleaning...');
+
+    // Strategy 1: Cut content at first JSON delimiter with safety buffer
+    const jsonDelimiters = [
+      '"updatedAt',
+      '"_id',
+      '"paper"',
+      '"authors"',
+      '"organization"',
       '"canRead"',
-      '","dailyPaperRank',
+      '"dailyPaperRank"',
       '"acceptLanguages"',
       '"upvoters"',
       '"discussionId"',
       '"ai_summary"',
       '"ai_keywords"',
-      '"githubStars"'
+      '"githubStars"',
+      '","_id:',
+      '","updatedAt:',
+      '":{',
+      '":['
     ];
 
     let bestCutIndex = -1;
-    for (const pattern of jsonStartPatterns) {
-      const index = content.indexOf(pattern);
-      if (index > 50) { // Only cut if we have substantial content before the JSON
-        bestCutIndex = index === -1 ? bestCutIndex : (bestCutIndex === -1 ? index : Math.min(bestCutIndex, index));
+    for (const delimiter of jsonDelimiters) {
+      const index = content.indexOf(delimiter);
+      if (index > 30) { // Reduced buffer for more aggressive cutting
+        // Look backward to find a sentence end
+        const precedingText = content.substring(0, index);
+        const lastSentenceEnd = Math.max(
+          precedingText.lastIndexOf('.'),
+          precedingText.lastIndexOf('!'),
+          precedingText.lastIndexOf('?')
+        );
+
+        if (lastSentenceEnd > 20) {
+          bestCutIndex = lastSentenceEnd + 1;
+        } else {
+          bestCutIndex = index === -1 ? bestCutIndex : (bestCutIndex === -1 ? index : Math.min(bestCutIndex, index));
+        }
       }
     }
 
-    if (bestCutIndex > 50) {
-      const cleanAbstract = content.substring(0, bestCutIndex).trim();
-      logger.debug(`Extracted clean abstract (${cleanAbstract.length} chars) before JSON metadata`);
-      return cleanAbstract;
+    if (bestCutIndex > 30) {
+      let cleanAbstract = content.substring(0, bestCutIndex).trim();
+
+      // Remove any trailing JSON fragments
+      cleanAbstract = cleanAbstract
+        .replace(/,\s*"[^"]*":\s*"[^"]*"?\s*$/g, '')
+        .replace(/,\s*"[^"]*":\s*\{[^}]*\}\s*$/g, '')
+        .replace(/,\s*"[^"]*":\s*\[[^\]]*\]\s*$/g, '')
+        .replace(/\s*"[^"]*":\s*"[^"]*"\s*$/g, '')
+        .trim();
+
+      if (cleanAbstract.length > 50 && validateAbstractStructure(cleanAbstract)) {
+        logger.debug(`Extracted clean abstract (${cleanAbstract.length} chars) before JSON metadata`);
+        return cleanAbstract;
+      }
     }
 
-    // Strategy 2: Try to extract content from structured JSON if entire content is JSON
-    if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
+    // Strategy 2: Extract sentences before JSON contamination
+    const sentences = content.split(/[.!?]+/);
+    const cleanSentences = [];
+
+    for (const sentence of sentences) {
+      const trimmed = sentence.trim();
+      if (trimmed.length > 15 &&
+          !contaminationPatterns.some(pattern => trimmed.includes(pattern)) &&
+          !trimmed.includes('huggingface.co') &&
+          !trimmed.includes('avatars/') &&
+          !trimmed.includes('github.com') &&
+          !trimmed.match(/^\s*[\d\.\)]+\s/) && // Skip numbered lists
+          validateAbstractStructure(trimmed)) {
+        cleanSentences.push(trimmed);
+      } else if (cleanSentences.length > 0) {
+        // Stop adding sentences once we hit contamination
+        break;
+      }
+    }
+
+    if (cleanSentences.length >= 2) {
+      const academicAbstract = cleanSentences.join('. ') + '.';
+      logger.debug(`Reconstructed academic abstract from clean sentences: ${academicAbstract.length} chars`);
+      return academicAbstract;
+    }
+
+    // Strategy 3: Try to extract from structured JSON if it's valid JSON
+    if ((content.trim().startsWith('{') && content.trim().endsWith('}')) ||
+        (content.trim().startsWith('[') && content.trim().endsWith(']'))) {
       try {
         const parsed = JSON.parse(content);
-        // Extract meaningful text from HuggingFace JSON structures
         if (typeof parsed === 'object') {
-          // Handle HuggingFace paper structure
-          if (parsed.summary && typeof parsed.summary === 'string') {
-            return parsed.summary.trim();
-          }
-          if (parsed.abstract && typeof parsed.abstract === 'string') {
-            return parsed.abstract.trim();
-          }
-          if (parsed.description && typeof parsed.description === 'string') {
-            return parsed.description.trim();
-          }
-
-          // Handle nested paper object
-          if (parsed.paper && parsed.paper.summary) {
-            return parsed.paper.summary.trim();
+          // Look for meaningful text fields
+          const textFields = ['summary', 'abstract', 'description', 'introduction', 'content', 'text'];
+          for (const field of textFields) {
+            if (parsed[field] && typeof parsed[field] === 'string' && parsed[field].length > 50) {
+              const extracted = parsed[field].trim();
+              if (validateAbstractStructure(extracted)) {
+                logger.debug(`Extracted clean abstract from JSON field '${field}': ${extracted.length} chars`);
+                return extracted;
+              }
+            }
           }
 
-          // Handle array of strings
+          // Handle nested structures
+          if (parsed.paper && typeof parsed.paper === 'object') {
+            for (const field of textFields) {
+              if (parsed.paper[field] && typeof parsed.paper[field] === 'string' && parsed.paper[field].length > 50) {
+                const extracted = parsed.paper[field].trim();
+                if (validateAbstractStructure(extracted)) {
+                  logger.debug(`Extracted clean abstract from nested paper.${field}: ${extracted.length} chars`);
+                  return extracted;
+                }
+              }
+            }
+          }
+
+          // Handle arrays of strings
           if (Array.isArray(parsed)) {
-            const textItems = parsed.filter(item => typeof item === 'string' && item.length > 20);
-            if (textItems.length > 0) {
-              return textItems.join('. ');
+            const validTexts = parsed.filter(item =>
+              typeof item === 'string' &&
+              item.length > 20 &&
+              validateAbstractStructure(item)
+            );
+            if (validTexts.length > 0) {
+              const joinedText = validTexts.join('. ');
+              logger.debug(`Extracted clean abstract from JSON array: ${joinedText.length} chars`);
+              return joinedText;
             }
           }
         }
       } catch (e) {
-        logger.debug('Failed to parse JSON content, trying alternative extraction');
+        logger.debug('Failed to parse JSON content, trying final extraction methods');
       }
     }
 
-    // Strategy 3: Use regex to extract text before JSON contamination
-    // Look for sentences that end before JSON starts
-    const textBeforeJson = content.split(/"\s*(?:,|})/)[0];
-    if (textBeforeJson.length > 50) {
-      // Further clean up - remove any trailing JSON-like fragments
-      const cleanedText = textBeforeJson.replace(/,\s*"[^"]*":\s*"[^"]*"$/g, '').trim();
-      if (cleanedText.length > 30) {
-        logger.debug(`Extracted text before JSON using regex: ${cleanedText.length} chars`);
-        return cleanedText;
-      }
-    }
-
-    // Strategy 4: Extract sentences that look like academic abstract content
-    const sentences = content.split(/[.!?]+/);
-    const academicSentences = sentences
-      .map(s => s.trim())
-      .filter(s =>
-        s.length > 20 &&
-        !s.includes('":"') &&
-        !s.includes('_id') &&
-        !s.includes('updatedAt') &&
-        !s.includes('huggingface.co') &&
-        !s.includes('avatars/') &&
-        !s.includes('github.com') &&
-        /^[A-Z]/.test(s) // Starts with capital letter
+    // Strategy 4: Last resort - use aggressive regex to extract any meaningful text
+    const textBlocks = content.match(/[^",[\]{}]*?[.!?][^",[\]{}]*?(?=[",[\]{}]|$)/g) || [];
+    const validBlocks = textBlocks
+      .map(block => block.trim())
+      .filter(block =>
+        block.length > 30 &&
+        validateAbstractStructure(block) &&
+        !contaminationPatterns.some(pattern => block.includes(pattern))
       );
 
-    if (academicSentences.length > 0) {
-      const academicAbstract = academicSentences.join('. ') + '.';
-      logger.debug(`Reconstructed academic abstract from sentences: ${academicAbstract.length} chars`);
-      return academicAbstract;
+    if (validBlocks.length > 0) {
+      const finalAbstract = validBlocks.join(' ').replace(/\s+/g, ' ');
+      logger.debug(`Extracted final abstract using regex fallback: ${finalAbstract.length} chars`);
+      return finalAbstract;
     }
 
-    // If all strategies fail, log warning and return empty
-    logger.warn('Could not extract clean abstract from JSON-contaminated content, discarding');
+    // If all strategies fail, return empty to avoid showing corrupted content
+    logger.warn('Could not extract clean abstract from JSON-contaminated content, discarding completely');
     return '';
   }
 
-  // Try to parse if it looks like pure JSON (for legitimate JSON responses)
-  if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
-    try {
-      const parsed = JSON.parse(content);
-      // Extract meaningful text from JSON structures
-      if (typeof parsed === 'object') {
-        // Handle different JSON structures
-        if (parsed.abstract) return parsed.abstract;
-        if (parsed.description) return parsed.description;
-        if (parsed.summary) return parsed.summary;
-        if (parsed.text) return parsed.text;
-        if (parsed.challenges && Array.isArray(parsed.challenges)) {
-          return parsed.challenges.join('. ');
-        }
-        if (parsed.introduction) return parsed.introduction;
-        if (parsed.innovations) return parsed.innovations;
-        if (parsed.experiments) return parsed.experiments;
-        if (parsed.insights) return parsed.insights;
-
-        // If it's an array of strings, join them
-        if (Array.isArray(parsed)) {
-          return parsed.filter(item => typeof item === 'string').join('. ');
-        }
-
-        // Fallback: stringify the object nicely
-        return JSON.stringify(parsed, null, 2);
-      }
-    } catch (e) {
-      // If parsing fails, return original content
-      logger.debug('Failed to parse JSON content, using original', { content: content.substring(0, 100) });
-    }
+  // If no contamination detected, still validate the content
+  if (validateAbstractStructure(content)) {
+    return content;
+  } else {
+    logger.warn('Content failed abstract structure validation, discarding');
+    return '';
   }
-
-  return content;
 }
 
 // Circuit breaker for API reliability
@@ -534,10 +583,41 @@ async function parseHuggingfacePaper(element, apiKey = null) {
       abstract = sanitizeJsonContent(abstract);
     }
 
-    // If after sanitization we still have issues, create a placeholder
-    if (!abstract || abstract.length < 20 || abstract.includes('":"')) {
-      logger.warn(`Could not extract clean abstract for "${title}", using placeholder`);
-      abstract = `Abstract not available. This paper discusses research related to ${title}. Please visit the paper's website for more details.`;
+    // Enhanced abstract quality validation
+    if (abstract && abstract.length >= 20) {
+      const qualityScore = calculateAbstractQuality(abstract);
+
+      // Only accept abstracts with decent quality scores
+      if (qualityScore >= 5) {
+        logger.debug(`Accepted high-quality abstract for "${title}" (${qualityScore}/10): ${abstract.substring(0, 60)}...`);
+      } else if (qualityScore >= 3) {
+        logger.debug(`Accepted marginal quality abstract for "${title}" (${qualityScore}/10): ${abstract.substring(0, 60)}...`);
+        // Keep it but note the marginal quality
+      } else {
+        logger.warn(`Rejecting low-quality abstract for "${title}" (${qualityScore}/10): ${abstract.substring(0, 60)}...`);
+        abstract = null; // Reject and try alternatives
+      }
+    }
+
+    // If after all processing we still don't have a good abstract, try arXiv cross-reference
+    if (!abstract || abstract.length < 20) {
+      logger.debug(`Attempting arXiv cross-reference for "${title}" due to missing/invalid abstract...`);
+      const arxivAbstract = await crossReferenceArxiv(title, authors);
+      if (arxivAbstract && calculateAbstractQuality(arxivAbstract) >= 3) {
+        abstract = arxivAbstract;
+        logger.debug(`Successfully obtained abstract from arXiv for "${title}"`);
+      }
+    }
+
+    // Final fallback - create a contextual placeholder if we still don't have an abstract
+    if (!abstract || abstract.length < 20) {
+      logger.warn(`Could not extract clean abstract for "${title}", creating contextual placeholder`);
+
+      // Extract key concepts from title for a better placeholder
+      const titleWords = title.toLowerCase().split(/\s+/);
+      const concepts = titleWords.filter(word => word.length > 4 && !word.includes('(') && !word.includes(')')).slice(0, 3);
+
+      abstract = `This paper presents research on ${concepts.join(', ')}. The full abstract is not available at this time. Please visit the paper's website for complete details about the methodology, results, and contributions.`;
     }
 
     // Abstract quality validation
@@ -750,17 +830,19 @@ function parseHuggingfaceHTML(htmlContent) {
   return papers;
 }
 
-// Scrape abstract from individual HuggingFace paper page
+// Enhanced abstract scraping from individual HuggingFace paper page
 async function scrapePaperFromIndividualPage(paperUrl) {
   try {
     logger.debug(`Scraping individual paper page: ${paperUrl}`);
 
     const response = await fetchWithTimeout(paperUrl, 15000, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br'
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
       }
     });
 
@@ -769,69 +851,210 @@ async function scrapePaperFromIndividualPage(paperUrl) {
     }
 
     const htmlContent = await response.text();
-
     logger.debug(`Retrieved HTML content (${htmlContent.length} chars) from ${paperUrl}`);
 
-    // Enhanced abstract extraction from individual paper pages
-    const abstractExtractionPatterns = [
-      // HuggingFace specific pattern - exact match for <div class="abstract">
-      /<div[^>]*class="abstract"[^>]*>([\s\S]*?)<\/div>/gi,
-      // HuggingFace meta tags
-      /<meta[^>]*property="og:description"[^>]*content="([^"]*)"[^>]*>/gi,
-      /<meta[^>]*name="description"[^>]*content="([^"]*)"[^>]*>/gi,
-      // General abstract patterns (fallbacks)
-      /<div[^>]*class="[^"]*abstract[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
-      /<section[^>]*class="[^"]*abstract[^"]*"[^>]*>([\s\S]*?)<\/section>/gi,
-      /<div[^>]*class="[^"]*(?:description|summary)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
-      // Paragraph patterns
-      /<p[^>]*class="[^"]*abstract[^"]*"[^>]*>([\s\S]*?)<\/p>/gi,
-      // Data attribute patterns
-      /<div[^>]*data-testid="[^"]*abstract[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
-      // Content div patterns
-      /<div[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/div>/gi
+    // Try multiple extraction strategies in order of reliability
+    const extractionStrategies = [
+      {
+        name: 'HuggingFace AI-Generated Summary (Primary Target)',
+        patterns: [
+          // HuggingFace text-based patterns for "AI-generated summary"
+          /AI-generated summary\s*\r?\n\s*([^\r\n]+(?:\r?\n[^\r\n]+)*)/gi,
+          /AI-generated summary\s*\n\s*([^\n]+(?:\n[^\n]+)*)/gi,
+          // Alternative patterns for different formatting
+          /AI-generated summary\s*[\r\n]+([^\r\n]+(?:[\r\n][^AI][^\r\n]*)*)/gi
+        ]
+      },
+      {
+        name: 'HuggingFace Short Abstract (Fallback)',
+        patterns: [
+          // HuggingFace text-based patterns for short abstract
+          /Abstract\s*[-]+\s*([^\r\n]+(?:\r?\n[^\r\n]+)*)/gi,
+          /Abstract\s*[-]+\s*([^\n]+)/gi,
+          // Alternative abstract patterns
+          /Abstract\s*[-]+\s*([^\r\n]+(?:[\r\n][^\r\n]+)*)/gi
+        ]
+      },
+      {
+        name: 'HuggingFace Main Abstract (HTML)',
+        patterns: [
+          /<div[^>]*class="abstract"[^>]*>\s*<p[^>]*>([\s\S]*?)<\/p>\s*<\/div>/gi,
+          /<div[^>]*class="abstract"[^>]*>([\s\S]*?)<\/div>/gi
+        ]
+      },
+      {
+        name: 'HuggingFace Abstract Headers (HTML)',
+        patterns: [
+          /<h3[^>]*>\s*Abstract\s*<\/h3>\s*<p[^>]*>([\s\S]*?)<\/p>/gi,
+          /<h4[^>]*>\s*Abstract\s*<\/h4>\s*<p[^>]*>([\s\S]*?)<\/p>/gi
+        ]
+      },
+      {
+        name: 'HuggingFace Section Abstracts (HTML)',
+        patterns: [
+          /<section[^>]*class="[^"]*abstract[^"]*"[^>]*>\s*<p[^>]*>([\s\S]*?)<\/p>\s*<\/section>/gi,
+          /<div[^>]*class="[^"]*prose[^"]*abstract[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+          /<div[^>]*class="[^"]*summary[^"]*"[^>]*>\s*<p[^>]*>([\s\S]*?)<\/p>\s*<\/div>/gi
+        ]
+      },
+      {
+        name: 'Meta Tags (Filtered)',
+        patterns: [
+          /<meta[^>]*property="og:description"[^>]*content="([^"]*)"[^>]*>/gi,
+          /<meta[^>]*name="description"[^>]*content="([^"]*)"[^>]*>/gi
+        ]
+      },
+      {
+        name: 'General Abstract Patterns (HTML)',
+        patterns: [
+          /<div[^>]*class="[^"]*abstract[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+          /<section[^>]*class="[^"]*abstract[^"]*"[^>]*>([\s\S]*?)<\/section>/gi,
+          /<p[^>]*class="[^"]*abstract[^"]*"[^>]*>([\s\S]*?)<\/p>/gi
+        ]
+      },
+      {
+        name: 'Content Paragraphs (Last Resort)',
+        patterns: [
+          /<p[^>]*>([^<]{100,500})<\/p>/gi
+        ]
+      }
     ];
 
-    logger.debug(`Trying ${abstractExtractionPatterns.length} abstract extraction patterns`);
+    let bestAbstract = null;
+    let bestScore = 0;
 
-    for (let i = 0; i < abstractExtractionPatterns.length; i++) {
-      const pattern = abstractExtractionPatterns[i];
-      let match;
-      try {
-        while ((match = pattern.exec(htmlContent)) !== null) {
-          const content = match[1] || match[0];
-          if (content) {
-            const cleanContent = content
-              .replace(/<[^>]*>/g, '')
-              .replace(/\s+/g, ' ')
+    for (const strategy of extractionStrategies) {
+      logger.debug(`Trying extraction strategy: ${strategy.name}`);
+
+      for (const pattern of strategy.patterns) {
+        let match;
+        try {
+          // Reset regex lastIndex for global patterns
+          if (pattern.global) {
+            pattern.lastIndex = 0;
+          }
+
+          while ((match = pattern.exec(htmlContent)) !== null) {
+            const content = match[1] || match[0];
+            if (!content) continue;
+
+            let cleanContent = content
+              .replace(/<[^>]*>/g, '') // Remove HTML tags
+              .replace(/\s+/g, ' ') // Normalize whitespace
               .trim();
 
-            // Lowered length requirement from 100 to 50 chars, and added debug info
-            if (cleanContent.length > 50 &&
-                !cleanContent.includes('Sign up') &&
-                !cleanContent.includes('Login') &&
-                !cleanContent.includes('Subscribe') &&
-                !cleanContent.includes('Follow')) {
-              logger.debug(`Pattern ${i + 1} found abstract (${cleanContent.length} chars): ${cleanContent.substring(0, 100)}...`);
-              return cleanContent;
-            } else if (cleanContent.length > 10) {
-              logger.debug(`Pattern ${i + 1} found content but too short or filtered: ${cleanContent.substring(0, 50)}...`);
+            // Additional cleaning for HuggingFace specific issues
+            cleanContent = cleanContent
+              .replace(/^\s*[-*]\s*/, '') // Remove leading bullets
+              .replace(/\s*[-*]\s*$/, '') // Remove trailing bullets
+              .replace(/Abstract\s*[:\-]?\s*/i, '') // Remove "Abstract:" prefix
+              .replace(/^PsiloQA[^.]*\./i, '') // Remove dataset names from start
+              // Clean up markdown-style citations [text](url) -> text
+              .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+              // Clean up multiple spaces and normalize
+              .replace(/\s+/g, ' ')
+              // Remove leading/trailing whitespace
+              .trim();
+
+            // Skip if content looks like JSON metadata
+            if (cleanContent.includes('":"') ||
+                cleanContent.includes('_id') ||
+                cleanContent.includes('updatedAt') ||
+                cleanContent.includes('"paper":')) {
+              logger.debug(`Skipping JSON-contaminated content from ${strategy.name}`);
+              continue;
+            }
+
+            // Filter out UI text and navigation content for meta tags
+            if (strategy.name.includes('Meta Tags') && (
+                cleanContent.includes('Join the discussion') ||
+                cleanContent.includes('Sign up') ||
+                cleanContent.includes('Log in') ||
+                cleanContent.includes('Click here') ||
+                cleanContent.includes('Subscribe') ||
+                cleanContent.length < 50)) {
+              logger.debug(`Skipping UI/navigation content from ${strategy.name}: ${cleanContent.substring(0, 50)}...`);
+              continue;
+            }
+
+            // Calculate quality score for this abstract
+            const qualityScore = calculateAbstractQuality(cleanContent);
+
+            if (qualityScore > bestScore && qualityScore >= 3) {
+              bestAbstract = cleanContent;
+              bestScore = qualityScore;
+              logger.debug(`New best abstract found (${qualityScore}/10, ${cleanContent.length} chars) from ${strategy.name}: ${cleanContent.substring(0, 80)}...`);
+            } else if (cleanContent.length > 30) {
+              logger.debug(`Found abstract but lower quality (${qualityScore}/10): ${cleanContent.substring(0, 50)}...`);
             }
           }
+        } catch (error) {
+          logger.warn(`Error applying pattern in ${strategy.name}: ${error.message}`);
         }
-
-        logger.debug(`Pattern ${i + 1} found no matches`);
-      } catch (error) {
-        logger.warn(`Error applying pattern ${i + 1} for abstract extraction: ${error.message}`);
       }
     }
 
-    logger.debug(`No abstract found on individual page: ${paperUrl}`);
+    if (bestAbstract && bestScore >= 4) {
+      logger.debug(`Selected best abstract with quality score ${bestScore}/10`);
+      return sanitizeJsonContent(bestAbstract);
+    } else if (bestAbstract && bestScore >= 2) {
+      logger.debug(`Selected acceptable abstract with quality score ${bestScore}/10 (marginal)`);
+      return sanitizeJsonContent(bestAbstract);
+    }
+
+    logger.debug(`No suitable abstract found on individual page: ${paperUrl}`);
     return null;
 
   } catch (error) {
     logger.warn(`Failed to scrape individual paper page ${paperUrl}:`, error.message);
     return null;
   }
+}
+
+// Calculate abstract quality score - updated for HuggingFace papers
+function calculateAbstractQuality(content) {
+  if (!content || content.length < 20) {
+    return 0;
+  }
+
+  let score = 0;
+
+  // Length score (0-4 points) - more generous for HuggingFace
+  if (content.length >= 200) score += 4;
+  else if (content.length >= 100) score += 3;
+  else if (content.length >= 50) score += 2;
+  else if (content.length >= 20) score += 1;
+
+  // Academic indicators (0-6 points) - expanded for modern ML/AI papers
+  const academicIndicators = [
+    /\b(present|propose|introduce|develop|show|demonstrate|evaluate|analyze|investigate|examine|address|enhance|improve)\b/i,
+    /\b(method|approach|technique|algorithm|framework|architecture|system|model|dataset|paper|work)\b/i,
+    /\b(result|performance|evaluation|experiment|comparison|benchmark|finding|study|analysis)\b/i,
+    /\b(problem|challenge|issue|limitation|drawback|gap|research|investigation)\b/i,
+    /\b(solve|address|overcome|improve|enhance|optimize|achieve|outperform|exceed)\b/i,
+    /\b(language|model|agent|training|learning|reinforcement|entropy|detection|hallucination)\b/i
+  ];
+
+  academicIndicators.forEach(pattern => {
+    if (pattern.test(content)) score += 1;
+  });
+
+  // Structure score (0-2 points) - more lenient
+  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 8);
+  if (sentences.length >= 2) score += 2;
+  else if (sentences.length >= 1) score += 1;
+
+  // Content diversity score (0-1 point)
+  const uniqueWords = new Set(content.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+  if (uniqueWords.size >= 15) score += 1;
+
+  // Negative indicators (subtract points) - more specific
+  if (content.includes('://') && !content.includes('arxiv.org')) score -= 1; // Allow arXiv links
+  if (content.includes('Sign up') || content.includes('Subscribe') || content.includes('Join the discussion')) score -= 2;
+  if (content.match(/^\s*\d+\./)) score -= 1; // Only if starts with number
+  if (content.includes('buy now') || content.includes('free trial')) score -= 2;
+
+  return Math.max(0, Math.min(10, score));
 }
 
 // Cross-reference with arXiv for missing abstracts
@@ -879,6 +1102,89 @@ async function crossReferenceArxiv(title, authors = []) {
     logger.warn(`Failed to cross-reference arXiv for "${title.substring(0, 50)}...":`, error.message);
     return null;
   }
+}
+
+// Validate abstract structure to ensure it's legitimate academic content
+function validateAbstractStructure(content) {
+  if (!content || content.length < 20) { // Reduced minimum length
+    return false;
+  }
+
+  // Check for academic writing patterns - more lenient for HuggingFace
+  const academicPatterns = [
+    /\b(present|propose|introduce|develop|show|demonstrate|evaluate|analyze|investigate|examine|address|enhance|improve)\b/i,
+    /\b(method|approach|technique|algorithm|framework|architecture|system|model|dataset|paper|work)\b/i,
+    /\b(result|performance|evaluation|experiment|comparison|benchmark|finding|study)\b/i,
+    /\b(problem|challenge|issue|limitation|drawback|gap|research)\b/i,
+    /\b(solve|address|overcome|improve|enhance|optimize|achieve|outperform)\b/i,
+    /\b(language|model|agent|training|learning|reinforcement|entropy)\b/i // More specific to recent papers
+  ];
+
+  const hasAcademicPattern = academicPatterns.some(pattern => pattern.test(content));
+
+  // Check for JSON contamination patterns
+  const jsonPatterns = [
+    /":\s*"/,
+    /_id/,
+    /updatedAt/,
+    /"paper":/,
+    /"authors":/,
+    /canRead/,
+    /dailyPaperRank/,
+    /acceptLanguages/,
+    /upvoters/,
+    /discussionId/,
+    /ai_summary/,
+    /ai_keywords/,
+    /githubStars/,
+    /\{.*\}/,
+    /\[.*\]/
+  ];
+
+  const hasJsonContamination = jsonPatterns.some(pattern => pattern.test(content));
+
+  // Check for obvious UI/navigation patterns that indicate this isn't an abstract
+  const uiPatterns = [
+    /sign up/i,
+    /log in/i,
+    /click here/i,
+    /join the discussion/i,
+    /subscribe/i,
+    /follow/i,
+    /buy now/i,
+    /free trial/i,
+    /view cart/i,
+    /add to collection/i
+  ];
+
+  const hasUiPattern = uiPatterns.some(pattern => pattern.test(content));
+
+  // Check for reference-like patterns - be more lenient with citations in abstracts
+  const referencePatterns = [
+    /^\s*\d+\./,           // Only if it starts with a number
+    /^\s*\[\d+\]/,        // Only if it starts with a bracketed number
+    /et al\.\s*$/i,       // Only if it ends with et al.
+    /doi:\s*10\./i,       // Only if it's a DOI at start/end
+    /arXiv:\s*\d+/i        // Only if it's an arXiv ID
+  ];
+
+  const hasReferencePattern = referencePatterns.some(pattern => pattern.test(content));
+
+  // Check for sentence structure - more lenient
+  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 8);
+  const hasGoodStructure = sentences.length >= 1 && (content.includes('.') || content.length > 100);
+
+  // Allow content with academic indicators even if structure is imperfect
+  if (hasAcademicPattern && !hasJsonContamination && !hasUiPattern && !hasReferencePattern) {
+    return true;
+  }
+
+  // Allow longer content with good structure even without strong academic indicators
+  if (content.length > 100 && hasGoodStructure && !hasJsonContamination && !hasUiPattern && !hasReferencePattern) {
+    return true;
+  }
+
+  return false;
 }
 
 // Calculate title similarity using simple string matching
@@ -1485,7 +1791,7 @@ async function generateFallbackHuggingFacePapers(maxPapers = 5) {
       category: topic.category,
       source: 'huggingface',
       original_source: 'huggingface_fallback', // Mark as fallback
-      url: `https://huggingface.co/papers/trending-${i + 1}`,
+      url: 'https://huggingface.co/papers',
       pdf_url: '',
       scraped_at: new Date().toISOString(),
       keywords: topic.keywords,
@@ -1535,4 +1841,13 @@ function removeDuplicatePapers(papers) {
 }
 
 // Export individual scraping functions for testing
-export { scrapeArxivPapers, scrapeHuggingfacePapers, parseArxivEntry, parseHuggingfacePaper };
+export {
+  scrapeArxivPapers,
+  scrapeHuggingfacePapers,
+  parseArxivEntry,
+  parseHuggingfacePaper,
+  sanitizeJsonContent,
+  validateAbstractStructure,
+  calculateAbstractQuality,
+  scrapePaperFromIndividualPage
+};

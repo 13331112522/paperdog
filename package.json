@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "dev:tools": "wrangler dev --inspect",
     "deploy": "wrangler deploy",
     "deploy:prod": "wrangler deploy --env production",
     "tail": "wrangler tail",

@@ -219,9 +219,35 @@ npm install
 # 本地测试
 wrangler dev
 
+# 本地测试（带Chrome DevTools调试）
+npm run dev:tools
+
 # 运行测试
 npm test
 ```
+
+### Chrome DevTools MCP 集成
+
+PaperDog 现在支持 Chrome DevTools MCP 集成，便于开发和调试：
+
+#### 功能特性
+- **实时调试**: 使用 Chrome DevTools 直接调试 Cloudflare Worker
+- **网络监控**: 监控所有 API 请求和响应
+- **性能分析**: 分析论文抓取和处理性能
+- **控制台日志**: 查看详细的调试信息和错误日志
+- **设备模拟**: 测试移动端和桌面端响应式设计
+
+#### 使用方法
+1. 运行带调试的开发服务器：`npm run dev:tools`
+2. 在 Claude 中使用 MCP 工具启动 Chrome DevTools
+3. 连接到 `localhost:8787` 进行调试
+
+#### 调试工具函数
+项目包含专用的调试工具函数，可在 Chrome DevTools 控制台中使用：
+- `debugUtils.debugLog()` - 记录调试信息
+- `debugUtils.tracePaperProcessing()` - 跟踪论文处理步骤
+- `debugUtils.networkLog()` - 监控网络请求
+- `debugUtils.performanceLog()` - 性能指标记录
 
 ### API接口
 - `GET /` - 博客首页
@@ -232,6 +258,8 @@ npm test
 - `GET /api/categories` - 获取论文分类
 - `GET /api/search` - 搜索论文
 - `GET /feed` - RSS订阅
+- `GET /api/debug/logs` - 获取调试日志（开发环境）
+- `POST /api/debug/clear-cache` - 清除缓存（开发环境）
 
 ### 定时任务
 系统配置为每日UTC时间8:00自动更新论文（北京时间16:00）。

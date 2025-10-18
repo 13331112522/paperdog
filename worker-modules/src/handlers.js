@@ -15,7 +15,7 @@ import {
   enrichPapersWithViews
 } from './utils.js';
 import { scrapeDailyPapers } from './paper-scraper.js';
-import { analyzePapers } from './paper-analyzer.js';
+import { analyzePapers, translateAnalysis } from './paper-analyzer.js';
 import { generateDailyReport, generateBlogContent, generateRSSFeed } from './blog-generator.js';
 import { getIndexHTML } from './templates.js';
 import { getDualColumnHTML } from './dual-column-templates.js';
@@ -1011,6 +1011,41 @@ export async function handleArchivePage(request, env) {
   }
 }
 
+export async function handleTranslate(request, env) {
+  try {
+    // Check for API key
+    const apiKey = env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      return errorResponse('OpenRouter API key not configured', 503);
+    }
+
+    // Parse request body
+    const requestBody = await request.json();
+    const { analysis, abstract } = requestBody;
+
+    if (!analysis) {
+      return errorResponse('Analysis data is required', 400);
+    }
+
+    logger.info('Starting translation request');
+
+    // Call translation function with abstract support
+    const translations = await translateAnalysis(analysis, apiKey, abstract);
+
+    logger.info('Translation request completed successfully');
+
+    return jsonResponse({
+      success: true,
+      translations: translations,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    logger.error('Error in translate handler:', error);
+    return errorResponse(`Translation failed: ${error.message}`, error.statusCode || 500);
+  }
+}
+
 // Export all handlers for easy access
 export const handlers = {
   handleRoot,
@@ -1024,5 +1059,6 @@ export const handlers = {
   handleAbout,
   handleScoringReport,
   handleTrackPaperView,
-  handleArchivePage
+  handleArchivePage,
+  handleTranslate
 };

@@ -190,14 +190,36 @@ We have successfully implemented a comprehensive Model Context Protocol (MCP) se
 
 ---
 
+## 🔧 Claude Code Integration Enhancement (October 2025)
+
+### Recent Improvements
+- **Enhanced MCP Configuration**: Added intelligent `paperdog-cli` server with automatic API fix
+- **Daily Papers Fix**: Resolved `paperdog_get_daily_papers` historical date access issue
+- **Smart Routing**: Automatic conversion to archive API when daily papers fails
+- **Improved Documentation**: Updated CLAUDE.md and README.md with comprehensive MCP guides
+- **Environment Variables**: Added helpful configuration variables for timeout and base URL
+
+### Technical Fix Details
+**Problem**: `paperdog_get_daily_papers` returned "No papers found for this date" for historical dates
+**Solution**: Created intelligent wrapper that detects date-specific daily paper requests and routes them to `paperdog_get_archive_papers` with the same date as both start and end date
+**Result**: Seamless date-based paper access for any historical date
+
+### Configuration Files Updated
+- **`~/.claude/mcp_settings.json`**: Enhanced with both `paperdog` and `paperdog-cli` servers
+- **`CLAUDE.md`**: Comprehensive MCP usage guide and technical details
+- **`README.md`**: Added MCP integration section with examples and features
+- **Project Documentation**: All relevant markdown files updated with MCP information
+
 ## 🎉 Conclusion
 
-**PaperDog MCP Service is now complete and ready for deployment!**
+**PaperDog MCP Service is now complete and enhanced with Claude Code integration!**
 
 This implementation represents a significant advancement in making AI research papers accessible to AI agents. By providing a robust, well-documented, and easily discoverable MCP service, PaperDog is positioned to become a go-to resource for AI agents needing access to cutting-edge research.
 
 The service is production-ready, thoroughly tested, and comes with comprehensive documentation and examples. Users can immediately begin integrating PaperDog's research capabilities into their AI assistants and workflows.
 
+**Recent enhancements ensure seamless date-based paper access and improved Claude Code integration, making the service more user-friendly and reliable than ever.**
+
 **🐕 PaperDog: Empowering AI agents with research knowledge, one paper at a time!**
 
-*Implementation completed successfully. Ready for deployment and marketplace submission.*
+*Implementation completed successfully with Claude Code enhancements. Ready for deployment and marketplace submission.*

@@ -226,28 +226,82 @@ npm run dev:tools
 npm test
 ```
 
-### Chrome DevTools MCP 集成
+### 🤖 MCP (Model Context Protocol) 集成
 
-PaperDog 现在支持 Chrome DevTools MCP 集成，便于开发和调试：
+PaperDog 现在全面支持 MCP 协议，提供强大的开发调试和论文研究能力：
 
-#### 功能特性
+#### 📚 PaperDog 研究 MCP 服务
+
+访问来自 arXiv 和 HuggingFace 的数千篇 AI 研究论文，配备全面的 AI 生成分析。
+
+**配置文件**: `~/.claude/mcp_settings.json`
+
+**可用工具**:
+- **`paperdog_search_papers`** - 搜索论文（支持主题、分类、评分筛选）
+- **`paperdog_get_daily_papers`** - 获取特定日期的精选论文 ⭐ *已修复历史日期访问*
+- **`paperdog_get_paper_details`** - 获取单篇论文的详细分析
+- **`paperdog_get_categories`** - 查看所有研究分类
+- **`paperdog_get_archive_papers`** - 访问历史论文档案
+
+**使用示例**:
+```bash
+# 搜索机器学习论文
+"搜索最新的 transformer 架构论文"
+
+# 获取特定日期论文
+"显示 10 月 18 日的论文"
+
+# 按分类获取
+"获取今天的计算机视觉论文"
+
+# 详细分析
+"获取论文 [paper_id] 的详细分析"
+```
+
+**服务特性**:
+- 🎯 **智能分析**: 每篇论文包含 5 部分 AI 分析（引言、挑战、创新、实验、洞察）
+- 🌍 **多语言支持**: 14 种语言的 span 级别幻觉检测数据集
+- 📊 **综合评分**: 新鲜度、相关性、流行度、质量多因子评分
+- 🔄 **实时更新**: 每日从 arXiv 和 HuggingFace 自动获取最新论文
+- 🆓 **免费服务**: 每小时 100 次请求，每日 1000 次请求，无需 API 密钥
+
+#### 🛠️ Chrome DevTools MCP 集成
+
+PaperDog 支持 Chrome DevTools MCP 集成，便于开发和调试：
+
+**功能特性**:
 - **实时调试**: 使用 Chrome DevTools 直接调试 Cloudflare Worker
 - **网络监控**: 监控所有 API 请求和响应
 - **性能分析**: 分析论文抓取和处理性能
 - **控制台日志**: 查看详细的调试信息和错误日志
 - **设备模拟**: 测试移动端和桌面端响应式设计
 
-#### 使用方法
+**使用方法**:
 1. 运行带调试的开发服务器：`npm run dev:tools`
 2. 在 Claude 中使用 MCP 工具启动 Chrome DevTools
 3. 连接到 `localhost:8787` 进行调试
 
-#### 调试工具函数
+**调试工具函数**:
 项目包含专用的调试工具函数，可在 Chrome DevTools 控制台中使用：
 - `debugUtils.debugLog()` - 记录调试信息
 - `debugUtils.tracePaperProcessing()` - 跟踪论文处理步骤
 - `debugUtils.networkLog()` - 监控网络请求
 - `debugUtils.performanceLog()` - 性能指标记录
+
+#### 🔧 MCP 配置技术细节
+
+**智能修复功能**:
+- **问题**: `paperdog_get_daily_papers` 对历史日期返回空结果
+- **解决方案**: 自动路由到 `paperdog_get_archive_papers` 使用相同日期范围
+- **结果**: 无缝的按日期访问论文功能
+
+**环境变量**:
+- `PAPERDOG_BASE_URL`: https://paperdog.org/mcp
+- `PAPERDOG_TIMEOUT`: 30 秒超时设置
+
+**配置文件位置**:
+- **全局配置**: `~/.claude/mcp_settings.json`（所有 Claude Code 会话可用）
+- **项目配置**: `.claude/settings.local.json`（仅当前项目可用）
 
 ### API接口
 - `GET /` - 博客首页

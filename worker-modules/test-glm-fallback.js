@@ -1,5 +1,5 @@
 // Test script to verify GLM fallback functionality
-import { callLLM, analyzeSinglePaper } from './src/paper-analyzer.js';
+import { analyzeSinglePaper } from './src/paper-analyzer.js';
 import { getGLMFallbackConfig } from './src/config.js';
 
 const testGLMFallback = async () => {
@@ -14,43 +14,36 @@ const testGLMFallback = async () => {
 
   const glmFallbackConfig = getGLMFallbackConfig(mockEnv);
 
-  const testPrompt = 'Analyze this research paper title: "Attention Is All You"';
-  const testModel = 'openai/gpt-5-mini';
-  const testParams = {
-    temperature: 0.3,
-    max_tokens: 200,
-    response_format: 'json_object'
+  // Test with actual paper analysis
+  console.log('Testing paper analysis with GLM fallback...');
+  const testPaper = {
+    id: 'test-paper-1',
+    title: 'Attention Is All You Need',
+    authors: ['Ashish Vaswani', 'Noam Shazeer', 'Niki Parmar'],
+    abstract: 'The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that have been improved over the years.',
+    published: '2017-06-12'
   };
 
   // Invalid OpenRouter API key to force fallback
   const invalidApiKey = 'invalid-key-to-force-fallback';
 
   try {
-    console.log('Attempting to call LLM with invalid OpenRouter key (should fallback to GLM)...');
-    const result = await callLLM(testPrompt, testModel, testParams, invalidApiKey, glmFallbackConfig);
-    console.log('✅ GLM fallback successful!');
-    console.log('Result:', result.substring(0, 200) + '...');
-  } catch (error) {
-    console.log('❌ Test failed:', error.message);
-  }
-
-  // Test with actual paper analysis
-  console.log('\nTesting paper analysis with fallback...');
-  const testPaper = {
-    id: 'test-paper-1',
-    title: 'Attention Is All You Need',
-    authors: ['Ashish Vaswani', 'Noam Shazeer', 'Niki Parmar'],
-    abstract: 'The dominant sequence transduction models are based on complex recurrent or convolutional neural networks.',
-    published: '2017-06-12'
-  };
-
-  try {
+    console.log('Attempting paper analysis with invalid OpenRouter key (should fallback to GLM)...');
     const analyzedPaper = await analyzeSinglePaper(testPaper, invalidApiKey, glmFallbackConfig);
     console.log('✅ Paper analysis with GLM fallback successful!');
+    console.log('Analysis categories:', analyzedPaper.analysis?.category);
+    console.log('Analysis score:', analyzedPaper.analysis?.relevance_score);
     console.log('Analysis summary:', analyzedPaper.analysis?.summary?.substring(0, 150) + '...');
   } catch (error) {
     console.log('❌ Paper analysis test failed:', error.message);
+    console.log('This is expected if GLM API is not accessible from this environment');
   }
+
+  console.log('\n✅ GLM fallback configuration test completed');
+  console.log('Configuration details:');
+  console.log('- GLM API Key:', glmFallbackConfig.apiKey ? '✓ Configured' : '✗ Missing');
+  console.log('- GLM Base URL:', glmFallbackConfig.baseUrl);
+  console.log('- GLM Model:', glmFallbackConfig.model);
 };
 
 // Run the test

@@ -421,6 +421,7 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                 }
             }
 
+            // Return original content if no JSON structure found or parsing failed
             return content;
         }
 
@@ -577,8 +578,11 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                     const translations = await fetchTranslations(paper);
 
                     // Merge translations into paper analysis
-                    if (translations) {
+                    if (translations && Object.keys(translations).length > 0) {
                         paper.analysis = { ...paper.analysis, ...translations };
+                    } else {
+                        // Mark error to prevent perpetual spinner
+                        paper.analysis = { ...paper.analysis, translation_error: true };
                     }
 
                     // Re-render both columns after translations are available
@@ -845,10 +849,11 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                 // Use Chinese abstract if available, otherwise show original with Chinese label
                 if (paper.abstract) {
                     html += '<h6>摘要 / Abstract</h6>';
-                    if (paper.analysis.chinese_abstract && paper.analysis.chinese_abstract.trim() && 
+                    const zhAbs = sanitizeChineseContent(paper.analysis.chinese_abstract || '');
+                    if (zhAbs && zhAbs.trim() && 
                         paper.analysis.chinese_abstract !== '英文内容不可用 / English content not available' &&
                         paper.analysis.chinese_abstract !== '翻译失败，请查看英文原文 / Translation failed, please see English original') {
-                        html += '<p>' + sanitizeChineseContent(paper.analysis.chinese_abstract) + '</p>';
+                        html += '<p>' + zhAbs + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-0" role="alert">';
                         html += '<i class="fas fa-info-circle me-1"></i>已提供中文翻译';
                         html += '</div>';
@@ -886,34 +891,47 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                 let hasChineseContent = false;
                 let translationStatus = [];
 
+                // Pre-sanitize values to drive checks and rendering
+                const zhIntro = sanitizeChineseContent(analysis.chinese_introduction || '');
+                const zhChallenges = sanitizeChineseContent(analysis.chinese_challenges || '');
+                const zhInnovations = sanitizeChineseContent(analysis.chinese_innovations || '');
+                const zhExperiments = sanitizeChineseContent(analysis.chinese_experiments || '');
+                const zhInsights = sanitizeChineseContent(analysis.chinese_insights || '');
+
                 // Check translation status
-                if (analysis.chinese_introduction && analysis.chinese_introduction.trim() && 
+                if (zhIntro && zhIntro.trim() && 
                     analysis.chinese_introduction !== '英文内容不可用 / English content not available' &&
                     analysis.chinese_introduction !== '翻译失败，请查看英文原文 / Translation failed, please see English original') {
                     hasChineseContent = true;
                 }
-                if (analysis.chinese_innovations && analysis.chinese_innovations.trim() && 
+                if (zhInnovations && zhInnovations.trim() && 
                     analysis.chinese_innovations !== '英文内容不可用 / English content not available' &&
                     analysis.chinese_innovations !== '翻译失败，请查看英文原文 / Translation failed, please see English original') {
                     hasChineseContent = true;
                 }
-                if (analysis.chinese_experiments && analysis.chinese_experiments.trim() && 
+                if (zhExperiments && zhExperiments.trim() && 
                     analysis.chinese_experiments !== '英文内容不可用 / English content not available' &&
                     analysis.chinese_experiments !== '翻译失败，请查看英文原文 / Translation failed, please see English original') {
                     hasChineseContent = true;
                 }
-                if (analysis.chinese_insights && analysis.chinese_insights.trim() && 
+                if (zhInsights && zhInsights.trim() && 
                     analysis.chinese_insights !== '英文内容不可用 / English content not available' &&
                     analysis.chinese_insights !== '翻译失败，请查看英文原文 / Translation failed, please see English original') {
                     hasChineseContent = true;
                 }
 
                 if (analysis.introduction) {
-                    if (analysis.chinese_introduction && analysis.chinese_introduction.trim()) {
+                    if (zhIntro && zhIntro.trim()) {
                         html += '<h6>介绍 / Introduction</h6>';
-                        html += '<p>' + sanitizeChineseContent(analysis.chinese_introduction) + '</p>';
+                        html += '<p>' + zhIntro + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
                         html += '<i class="fas fa-check-circle me-1"></i>中文翻译已完成';
+                        html += '</div>';
+                    } else if (analysis.translation_error) {
+                        html += '<h6>介绍 / Introduction</h6>';
+                        html += '<p>' + analysis.introduction + '</p>';
+                        html += '<div class="alert alert-danger alert-sm mt-2 mb-3" role="alert">';
+                        html += '<i class="fas fa-exclamation-triangle me-1"></i>翻译暂不可用，请稍后重试';
                         html += '</div>';
                     } else {
                         html += '<h6>介绍 / Introduction</h6>';
@@ -925,11 +943,17 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                 }
 
                 if (analysis.challenges) {
-                    if (analysis.chinese_challenges && analysis.chinese_challenges.trim()) {
+                    if (zhChallenges && zhChallenges.trim()) {
                         html += '<h6>挑战 / Challenges</h6>';
-                        html += '<p>' + sanitizeChineseContent(analysis.chinese_challenges) + '</p>';
+                        html += '<p>' + zhChallenges + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
                         html += '<i class="fas fa-check-circle me-1"></i>中文翻译已完成';
+                        html += '</div>';
+                    } else if (analysis.translation_error) {
+                        html += '<h6>挑战 / Challenges</h6>';
+                        html += '<p>' + analysis.challenges + '</p>';
+                        html += '<div class="alert alert-danger alert-sm mt-2 mb-3" role="alert">';
+                        html += '<i class="fas fa-exclamation-triangle me-1"></i>翻译暂不可用，请稍后重试';
                         html += '</div>';
                     } else {
                         html += '<h6>挑战 / Challenges</h6>';
@@ -941,11 +965,17 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                 }
 
                 if (analysis.innovations) {
-                    if (analysis.chinese_innovations && analysis.chinese_innovations.trim()) {
+                    if (zhInnovations && zhInnovations.trim()) {
                         html += '<h6>创新点 / Innovations</h6>';
-                        html += '<p>' + sanitizeChineseContent(analysis.chinese_innovations) + '</p>';
+                        html += '<p>' + zhInnovations + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
                         html += '<i class="fas fa-check-circle me-1"></i>中文翻译已完成';
+                        html += '</div>';
+                    } else if (analysis.translation_error) {
+                        html += '<h6>创新点 / Innovations</h6>';
+                        html += '<p>' + analysis.innovations + '</p>';
+                        html += '<div class="alert alert-danger alert-sm mt-2 mb-3" role="alert">';
+                        html += '<i class="fas fa-exclamation-triangle me-1"></i>翻译暂不可用，请稍后重试';
                         html += '</div>';
                     } else {
                         html += '<h6>创新点 / Innovations</h6>';
@@ -957,11 +987,17 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                 }
 
                 if (analysis.experiments) {
-                    if (analysis.chinese_experiments && analysis.chinese_experiments.trim()) {
+                    if (zhExperiments && zhExperiments.trim()) {
                         html += '<h6>实验与结果 / Experiments & Results</h6>';
-                        html += '<p>' + sanitizeChineseContent(analysis.chinese_experiments) + '</p>';
+                        html += '<p>' + zhExperiments + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
                         html += '<i class="fas fa-check-circle me-1"></i>中文翻译已完成';
+                        html += '</div>';
+                    } else if (analysis.translation_error) {
+                        html += '<h6>实验与结果 / Experiments & Results</h6>';
+                        html += '<p>' + analysis.experiments + '</p>';
+                        html += '<div class="alert alert-danger alert-sm mt-2 mb-3" role="alert">';
+                        html += '<i class="fas fa-exclamation-triangle me-1"></i>翻译暂不可用，请稍后重试';
                         html += '</div>';
                     } else {
                         html += '<h6>实验与结果 / Experiments & Results</h6>';
@@ -973,11 +1009,17 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                 }
 
                 if (analysis.insights) {
-                    if (analysis.chinese_insights && analysis.chinese_insights.trim()) {
+                    if (zhInsights && zhInsights.trim()) {
                         html += '<h6>见解与未来方向 / Insights & Future Directions</h6>';
-                        html += '<p>' + sanitizeChineseContent(analysis.chinese_insights) + '</p>';
+                        html += '<p>' + zhInsights + '</p>';
                         html += '<div class="alert alert-info alert-sm mt-2 mb-3" role="alert">';
                         html += '<i class="fas fa-check-circle me-1"></i>中文翻译已完成';
+                        html += '</div>';
+                    } else if (analysis.translation_error) {
+                        html += '<h6>见解与未来方向 / Insights & Future Directions</h6>';
+                        html += '<p>' + analysis.insights + '</p>';
+                        html += '<div class="alert alert-danger alert-sm mt-2 mb-3" role="alert">';
+                        html += '<i class="fas fa-exclamation-triangle me-1"></i>翻译暂不可用，请稍后重试';
                         html += '</div>';
                     } else {
                         html += '<h6>见解与未来方向 / Insights & Future Directions</h6>';
@@ -1047,9 +1089,13 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
                     if (result.success && result.translations) {
                         return result.translations;
                     }
+                } else {
+                    console.warn('Translate API returned non-OK:', response.status);
+                    return null;
                 }
             } catch (error) {
                 console.error('Failed to fetch translations:', error);
+                return null;
             }
 
             return {};

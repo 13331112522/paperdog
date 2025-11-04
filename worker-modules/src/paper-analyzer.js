@@ -62,7 +62,7 @@ Generate 5 distinct text blocks in English. Use formatting suitable for Twitter 
 }`;
 }
 
-export async function analyzePapers(papers, apiKey) {
+export async function analyzePapers(papers, apiKey, glmFallbackConfig = null) {
   if (!apiKey) {
     throw new AppError('OpenRouter API key is required for paper analysis');
   }
@@ -89,7 +89,7 @@ export async function analyzePapers(papers, apiKey) {
       const paperIndex = i + batchIndex + 1;
       try {
         logger.info(`Analyzing paper ${paperIndex}/${papers.length}: ${paper.title.substring(0, 50)}...`);
-        const analyzedPaper = await analyzeSinglePaper(paper, apiKey);
+        const analyzedPaper = await analyzeSinglePaper(paper, apiKey, glmFallbackConfig);
         if (analyzedPaper) {
           logger.info(`Successfully analyzed paper ${paperIndex}/${papers.length}`);
           return analyzedPaper;
@@ -128,7 +128,7 @@ export async function analyzePapers(papers, apiKey) {
   return analyzedPapers;
 }
 
-export async function analyzeSinglePaper(paper, apiKey) {
+export async function analyzeSinglePaper(paper, apiKey, glmFallbackConfig = null) {
   try {
     logger.debug(`Analyzing paper: ${paper.title}`);
 
@@ -157,21 +157,26 @@ export async function analyzeSinglePaper(paper, apiKey) {
     let analysisResult = null;
     let modelUsed = MODEL_CONFIG.analysis;
 
-    // Try primary model first
+    // GLM fallback configuration (passed as parameter)
+    if (!glmFallbackConfig) {
+      logger.warn('No GLM fallback configuration provided');
+    }
+
+    // Try primary model first with GLM fallback
     try {
-      analysisResult = await callLLM(prompt, MODEL_CONFIG.analysis, MODEL_PARAMS.analysis, apiKey);
+      analysisResult = await callLLM(prompt, MODEL_CONFIG.analysis, MODEL_PARAMS.analysis, apiKey, glmFallbackConfig);
       logger.debug(`Primary model (${MODEL_CONFIG.analysis}) succeeded`);
     } catch (primaryError) {
-      logger.warn(`Primary model failed, trying fallback:`, primaryError.message);
+      logger.warn(`Primary model with fallback failed, trying secondary OpenRouter model:`, primaryError.message);
 
       // Try fallback model
       try {
-        analysisResult = await callLLM(prompt, MODEL_CONFIG.fallback_analysis, MODEL_PARAMS.analysis, apiKey);
+        analysisResult = await callLLM(prompt, MODEL_CONFIG.fallback_analysis, MODEL_PARAMS.analysis, apiKey, glmFallbackConfig);
         modelUsed = MODEL_CONFIG.fallback_analysis;
         logger.debug(`Fallback model (${MODEL_CONFIG.fallback_analysis}) succeeded`);
       } catch (fallbackError) {
-        logger.error(`Both models failed for paper ${paper.title}:`, fallbackError);
-        throw new AppError(`Failed to analyze paper with both models: ${fallbackError.message}`);
+        logger.error(`All models failed for paper ${paper.title}:`, fallbackError);
+        throw new AppError(`Failed to analyze paper with all models: ${fallbackError.message}`);
       }
     }
 
@@ -203,7 +208,30 @@ export async function analyzeSinglePaper(paper, apiKey) {
   }
 }
 
-async function callLLM(prompt, model, params, apiKey) {
+async function callLLM(prompt, model, params, apiKey, fallbackConfig = null) {
+  // Try OpenRouter first
+  try {
+    return await callOpenRouter(prompt, model, params, apiKey);
+  } catch (openRouterError) {
+    logger.warn(`OpenRouter API failed:`, openRouterError.message);
+
+    // If fallback config is provided, try GLM
+    if (fallbackConfig) {
+      logger.info('Attempting fallback to GLM API');
+      try {
+        return await callGLM(prompt, model, params, fallbackConfig);
+      } catch (glmError) {
+        logger.error(`GLM fallback also failed:`, glmError.message);
+        throw new AppError(`Both OpenRouter and GLM APIs failed. OpenRouter: ${openRouterError.message}, GLM: ${glmError.message}`);
+      }
+    }
+
+    // No fallback available, re-throw the original error
+    throw openRouterError;
+  }
+}
+
+async function callOpenRouter(prompt, model, params, apiKey) {
   const url = 'https://openrouter.ai/api/v1/chat/completions';
 
   const headers = {
@@ -218,7 +246,7 @@ async function callLLM(prompt, model, params, apiKey) {
     messages: [
       {
         role: 'system',
-        content: 'You are an expert AI research analyst specializing in computer vision and machine learning. Provide detailed, accurate analysis of research papers.'
+        content: (params && params.system_role) ? params.system_role : 'You are an expert AI research analyst specializing in computer vision and machine learning. Provide detailed, accurate analysis of research papers.'
       },
       {
         role: 'user',
@@ -226,9 +254,14 @@ async function callLLM(prompt, model, params, apiKey) {
       }
     ],
     temperature: params.temperature || 0.3,
-    max_tokens: params.max_tokens || 1000,
-    response_format: { type: 'json_object' }
+    max_tokens: params.max_tokens || 1000
   };
+
+  // Only enforce JSON output when explicitly requested by caller (analysis),
+  // translation should return free-form text.
+  if (params && params.response_format === 'json_object') {
+    requestBody.response_format = { type: 'json_object' };
+  }
 
   // Retry logic for network failures - optimized for GPT-5-mini
   const maxRetries = 3;
@@ -236,8 +269,8 @@ async function callLLM(prompt, model, params, apiKey) {
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const timeout = baseTimeout * attempt; // Exponential backoff: 120s, 240s, 360s
-      logger.debug(`LLM API call attempt ${attempt}/${maxRetries} with ${timeout}ms timeout`);
+      const timeout = baseTimeout * attempt; // Exponential backoff: 30s, 60s, 90s
+      logger.debug(`OpenRouter API call attempt ${attempt}/${maxRetries} with ${timeout}ms timeout`);
 
       const response = await fetchWithTimeout(url, timeout, {
         method: 'POST',
@@ -258,34 +291,128 @@ async function callLLM(prompt, model, params, apiKey) {
           }
         }
 
-        throw new AppError(`LLM API error: ${response.status} - ${errorText}`);
+        throw new AppError(`OpenRouter API error: ${response.status} - ${errorText}`);
       }
 
       const data = await response.json();
 
       if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        throw new AppError('Invalid LLM response format');
+        throw new AppError('Invalid OpenRouter response format');
       }
 
       const content = data.choices[0].message.content;
       if (!content) {
-        throw new AppError('Empty LLM response');
+        throw new AppError('Empty OpenRouter response');
       }
 
-      logger.debug(`LLM API call succeeded on attempt ${attempt}`);
+      logger.debug(`OpenRouter API call succeeded on attempt ${attempt}`);
       return content;
 
     } catch (error) {
-      logger.warn(`LLM API call failed on attempt ${attempt}:`, error.message);
+      logger.warn(`OpenRouter API call failed on attempt ${attempt}:`, error.message);
 
       if (attempt === maxRetries) {
-        logger.error('All LLM API call attempts failed:', error);
-        throw new AppError(`Failed to call LLM API after ${maxRetries} attempts: ${error.message}`);
+        logger.error('All OpenRouter API call attempts failed:', error);
+        throw new AppError(`Failed to call OpenRouter API after ${maxRetries} attempts: ${error.message}`);
       }
 
       // Quadratic backoff: 2s, 8s, 18s
       const retryDelay = Math.min(2000 * (attempt * attempt), 18000);
       logger.debug(`Waiting ${retryDelay}ms before retry...`);
+      await sleep(retryDelay);
+    }
+  }
+}
+
+async function callGLM(prompt, model, params, glmConfig) {
+  const url = glmConfig.baseUrl.endsWith('/') ? `${glmConfig.baseUrl}chat/completions` : `${glmConfig.baseUrl}/chat/completions`;
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${glmConfig.apiKey}`
+  };
+
+  // GLM model mapping - if OpenRouter model is requested, map to GLM model
+  const glmModel = glmConfig.model || 'glm-4-air';
+
+  const requestBody = {
+    model: glmModel,
+    messages: [
+      {
+        role: 'system',
+        content: (params && params.system_role) ? params.system_role : 'You are an expert AI research analyst specializing in computer vision and machine learning. Provide detailed, accurate analysis of research papers.'
+      },
+      {
+        role: 'user',
+        content: prompt
+      }
+    ],
+    temperature: params.temperature || 0.3,
+    max_tokens: params.max_tokens || 1000
+  };
+
+  // Only enforce JSON output when explicitly requested by caller
+  if (params && params.response_format === 'json_object') {
+    // Note: GLM might not support response_format, so we'll include JSON instructions in the prompt instead
+    requestBody.messages[0].content += '\n\nIMPORTANT: You must respond with valid JSON only, no markdown code blocks or additional text.';
+  }
+
+  // Retry logic for GLM API
+  const maxRetries = 3;
+  const baseTimeout = 30000; // 30 seconds
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const timeout = baseTimeout * attempt; // Exponential backoff
+      logger.debug(`GLM API call attempt ${attempt}/${maxRetries} with ${timeout}ms timeout`);
+
+      const response = await fetchWithTimeout(url, timeout, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(requestBody)
+      });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+
+        // Handle rate limit specifically
+        if (response.status === 429) {
+          const retryAfter = parseInt(errorText.match(/retry_after:\s*(\d+)/i)?.[1] || '30');
+          logger.warn(`GLM rate limited, waiting ${retryAfter}s before retry...`);
+          if (attempt < maxRetries) {
+            await sleep(retryAfter * 1000);
+            continue;
+          }
+        }
+
+        throw new AppError(`GLM API error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        throw new AppError('Invalid GLM response format');
+      }
+
+      const content = data.choices[0].message.content;
+      if (!content) {
+        throw new AppError('Empty GLM response');
+      }
+
+      logger.debug(`GLM API call succeeded on attempt ${attempt}`);
+      return content;
+
+    } catch (error) {
+      logger.warn(`GLM API call failed on attempt ${attempt}:`, error.message);
+
+      if (attempt === maxRetries) {
+        logger.error('All GLM API call attempts failed:', error);
+        throw new AppError(`Failed to call GLM API after ${maxRetries} attempts: ${error.message}`);
+      }
+
+      // Backoff between retries
+      const retryDelay = Math.min(2000 * (attempt * attempt), 18000);
+      logger.debug(`Waiting ${retryDelay}ms before GLM retry...`);
       await sleep(retryDelay);
     }
   }
@@ -557,7 +684,7 @@ async function parseAnalysisResponse(response, apiKey) {
 }
 
 // New on-demand translation function
-export async function translateAnalysis(analysis, apiKey, abstract = null) {
+export async function translateAnalysis(analysis, apiKey, abstract = null, glmFallbackConfig = null) {
   const translationPairs = [
     { english: 'abstract', chinese: 'chinese_abstract', promptKey: 'abstract' },
     { english: 'introduction', chinese: 'chinese_introduction', promptKey: 'introduction' },
@@ -584,6 +711,11 @@ export async function translateAnalysis(analysis, apiKey, abstract = null) {
 
   logger.info(`Starting translation for ${translationsNeeded.length} fields`);
 
+  // GLM fallback configuration for translation (passed as parameter)
+  if (!glmFallbackConfig) {
+    logger.warn('No GLM fallback configuration provided for translation');
+  }
+
   // Process translations concurrently for better performance
   const translationPromises = translationsNeeded.map(async (pair) => {
     const englishContent = dataToTranslate[pair.english];
@@ -596,16 +728,79 @@ ${englishContent}
 
 请只返回翻译后的中文文本，不要添加任何额外说明或格式。`;
 
-      const translatedContent = await callLLM(translationPrompt, MODEL_CONFIG.translation, MODEL_PARAMS.translation, apiKey);
+      // Per-field retry to reduce partial failures
+      const maxAttempts = 2;
+      let lastError = null;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const translatedContent = await callLLM(
+            translationPrompt,
+            MODEL_CONFIG.translation,
+            { ...MODEL_PARAMS.translation, system_role: 'You are a professional Chinese translator. Translate the user content into Simplified Chinese only. Output plain Chinese text only, no JSON, no code fences, no extra commentary.' },
+            apiKey,
+            glmFallbackConfig
+          );
 
-      // Clean up the response
-      let cleanTranslation = translatedContent.trim();
-      if (cleanTranslation.startsWith('```')) {
-        cleanTranslation = cleanTranslation.replace(/```[\w]*\n?/, '').replace(/\n?```$/, '');
+          // Clean up the response
+          let cleanTranslation = translatedContent.trim();
+          if (cleanTranslation.startsWith('```')) {
+            cleanTranslation = cleanTranslation.replace(/```[\w]*\n?/, '').replace(/\n?```$/, '');
+          }
+
+          // Unwrap JSON-shaped responses and extract textual content
+          try {
+            if (cleanTranslation.startsWith('{') || cleanTranslation.startsWith('[')) {
+              const parsed = JSON.parse(cleanTranslation);
+              let extracted = '';
+
+              if (Array.isArray(parsed)) {
+                extracted = parsed.filter(v => typeof v === 'string' && v.trim()).join('；');
+              } else if (parsed && typeof parsed === 'object') {
+                const candidateKeys = ['translation', 'chinese', 'zh', 'text', 'content', 'result', 'output'];
+                for (const k of candidateKeys) {
+                  if (typeof parsed[k] === 'string' && parsed[k].trim()) {
+                    extracted = parsed[k].trim();
+                    break;
+                  }
+                  if (Array.isArray(parsed[k])) {
+                    const joined = parsed[k].filter(v => typeof v === 'string' && v.trim()).join('；');
+                    if (joined) { extracted = joined; break; }
+                  }
+                }
+                if (!extracted) {
+                  for (const v of Object.values(parsed)) {
+                    if (typeof v === 'string' && v.trim()) { extracted = v.trim(); break; }
+                    if (Array.isArray(v)) {
+                      const joined = v.filter(x => typeof x === 'string' && x.trim()).join('；');
+                      if (joined) { extracted = joined; break; }
+                    }
+                  }
+                }
+              }
+              cleanTranslation = extracted || '';
+            }
+          } catch (_) {
+            // ignore parse errors; fall back to raw text
+          }
+
+          // Guard against empty/placeholder responses
+          if (!cleanTranslation || cleanTranslation.trim().length < 2) {
+            throw new Error('Empty translation content');
+          }
+
+          logger.debug(`Successfully translated ${pair.promptKey} to Chinese (attempt ${attempt})`);
+          return { field: pair.chinese, content: cleanTranslation, success: true };
+        } catch (innerErr) {
+          lastError = innerErr;
+          logger.warn(`Translate ${pair.promptKey} attempt ${attempt} failed:`, innerErr.message);
+          if (attempt < maxAttempts) {
+            await sleep(500 + attempt * 500);
+            continue;
+          }
+        }
       }
 
-      logger.debug(`Successfully translated ${pair.promptKey} to Chinese`);
-      return { field: pair.chinese, content: cleanTranslation, success: true };
+      throw lastError || new Error('Unknown translation error');
 
     } catch (translationError) {
       logger.warn(`Failed to translate ${pair.promptKey}:`, translationError.message);
@@ -634,6 +829,9 @@ ${englishContent}
   });
 
   logger.info(`Completed ${successfulTranslations}/${translationsNeeded.length} translations`);
+  if (successfulTranslations === 0) {
+    logger.warn('All translation attempts failed for requested fields');
+  }
 
   return translations;
 }
@@ -738,11 +936,11 @@ function inferCategory(paper) {
   }
 }
 
-export async function generatePaperSummary(paper, apiKey) {
+export async function generatePaperSummary(paper, apiKey, glmFallbackConfig = null) {
   if (!paper.analysis || !paper.analysis.summary) {
     throw new AppError('Paper analysis is required for summary generation');
   }
-  
+
   const prompt = `Create a concise, engaging summary (under 200 words) of this AI research paper for a blog audience:
 
 **Title:** ${paper.title}
@@ -759,7 +957,12 @@ ${paper.analysis.summary}
 Format the summary to be engaging and accessible to AI enthusiasts while maintaining technical accuracy.`;
 
   try {
-    const summaryResult = await callLLM(prompt, MODEL_CONFIG.summary, MODEL_PARAMS.summary, apiKey);
+    // GLM fallback configuration for summary generation (passed as parameter)
+    if (!glmFallbackConfig) {
+      logger.warn('No GLM fallback configuration provided for summary generation');
+    }
+
+    const summaryResult = await callLLM(prompt, MODEL_CONFIG.summary, MODEL_PARAMS.summary, apiKey, glmFallbackConfig);
     return summaryResult.trim();
   } catch (error) {
     logger.error('Failed to generate paper summary:', error);

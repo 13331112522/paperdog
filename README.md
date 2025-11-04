@@ -5,11 +5,12 @@
 ## ✨ 功能特点
 
 ### 🧠 AI驱动的智能分析
-- 🤖 **多模型分析系统** - GPT-5-mini主模型 + Gemini 2.5 Flash Lite备用模型
+- 🤖 **多模型分析系统** - GPT-5-mini主模型 + Gemini 2.5 Flash Lite备用模型 + GLM-4-air智能回退
 - 🧠 **5段式深度分析** - 研究背景、技术挑战、创新内容、实验结果、深度洞察 (每段280字符)
 - 🏷️ **智能分类系统** - 11个AI/ML领域自动分类，关键词智能匹配
 - 📊 **多因子评分算法** - 新鲜度30%、相关性40%、流行度20%、质量10%
 - 🎯 **智能平衡选优** - arXiv 5篇 + HuggingFace 5篇，智能平局决胜
+- 🔄 **三级容错机制** - OpenRouter → GLM智能回退 → 完整错误处理
 
 ### 🌐 完整双语支持
 - 🇨🇳 **全中文翻译** - 论文摘要、分析内容、界面元素的完整中文翻译
@@ -46,9 +47,10 @@
 - **Cloudflare Workers** - 无服务器边缘计算平台，全球CDN部署
 - **Cloudflare KV** - 分布式键值存储，高性能论文数据缓存
 - **OpenRouter API** - 多模型接入：GPT-5-mini、Gemini 2.5 Flash Lite、DeepSeek V3.1
+- **GLM API** - 智能回退系统：GLM-4-air模型，OpenRouter失效时自动切换
 - **arXiv API** - 获取学术论文数据，支持多分类订阅
 - **Web Scraping** - HuggingFace多策略页面数据提取，支持React现代网站
-- **智能重试机制** - 指数退避算法，API可靠性保障
+- **三级容错机制** - OpenRouter → GLM智能回退 → 完整错误处理
 
 ### 前端技术栈
 - **HTML5 + CSS3** - 现代化语义化网页结构
@@ -63,11 +65,19 @@
 ### 1. 环境要求
 - Cloudflare账户
 - OpenRouter API密钥
+- GLM API密钥（可选，作为回退方案）
 - paperdog.org域名（已配置）
 
 ### 2. 获取API密钥
-1. 访问 [OpenRouter.ai](https://openrouter.ai) 注册账户
-2. 获取API密钥
+1. **OpenRouter API**:
+   - 访问 [OpenRouter.ai](https://openrouter.ai) 注册账户
+   - 获取API密钥
+
+2. **GLM API** (推荐配置，提供高可用性):
+   - 访问 [智谱AI开放平台](https://open.bigmodel.cn/) 注册账户
+   - 获取API密钥
+   - 推荐模型: GLM-4-air
+
 3. 记录密钥用于配置
 
 ### 3. Cloudflare配置
@@ -89,7 +99,13 @@ wrangler kv:namespace create "PAPERS"
 
 ```toml
 [vars]
+# AI Service Configuration
 OPENROUTER_API_KEY = "your-openrouter-api-key-here"
+GLM_API_KEY = "your-glm-api-key-here"  # 可选但强烈推荐
+GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4/"
+GLM_MODEL = "glm-4-air"
+
+# Site Configuration
 SITE_TITLE = "PaperDog - AI论文每日更新"
 SITE_DESCRIPTION = "每日精选AI和计算机视觉最新论文研究"
 DOMAIN = "paperdog.org"
@@ -100,6 +116,11 @@ binding = "PAPERS"
 id = "your-kv-namespace-id-here"
 preview_id = "your-kv-namespace-id-here"
 ```
+
+**GLM配置说明**:
+- `GLM_API_KEY`: 智谱AI API密钥，作为OpenRouter的回退方案
+- `GLM_BASE_URL`: GLM API端点，通常使用默认值
+- `GLM_MODEL`: 推荐使用 `glm-4-air`，性价比最佳
 
 ## 🚀 部署步骤
 
@@ -327,12 +348,14 @@ PaperDog 支持 Chrome DevTools MCP 集成，便于开发和调试：
 ### AI分析配置
 - **主模型**: GPT-5-mini（主要分析）
 - **备用模型**: Gemini 2.5 Flash Lite Preview（容错分析）
-- **翻译模型**: DeepSeek V3.1 Terminus（中文翻译）
-- **总结模型**: Gemini 2.5 Flash Preview（内容总结）
+- **智能回退**: GLM-4-air（OpenRouter失效时自动切换）
+- **翻译模型**: Gemini 2.5 Flash Preview（中文翻译，支持GLM回退）
+- **总结模型**: Gemini 2.5 Flash Preview（内容总结，支持GLM回退）
 - **分析维度**: 研究背景、技术挑战、创新内容、实验结果、深度洞察
 - **字符限制**: 每段分析不超过280字符
 - **评分机制**: 多因子综合评分 (1-10分，支持小数)
 - **智能平衡**: 5+5来源分配算法，随机平局决胜
+- **三级容错**: OpenRouter → GLM → 完整错误处理，确保服务高可用性
 
 ### 缓存策略
 - **多级缓存体系**: 论文数据缓存24小时，单篇论文缓存7天
@@ -397,6 +420,33 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 
 ---
 
+## 🔄 GLM智能回退系统 (v3.2 - 2025年11月)
+
+### 🚀 新功能特性
+- **✅ 智能回退机制**: OpenRouter API失效时自动切换到GLM-4-air
+- **✅ 环境变量配置**: 所有API密钥通过环境变量管理，提升安全性
+- **✅ 三级容错架构**: 主模型 → 备用模型 → GLM回退 → 错误处理
+- **✅ 全功能支持**: 论文分析、中文翻译、内容总结均支持GLM回退
+- **✅ 无缝切换**: 用户无感知的API切换，保证服务连续性
+
+### 🔧 技术实现
+- **配置管理**: `getGLMFallbackConfig(env)` 函数读取环境变量
+- **参数传递**: 所有关键函数支持 `glmFallbackConfig` 参数
+- **错误处理**: 完整的错误日志和双重API失败报告
+- **默认值**: 环境变量缺失时提供合理默认配置
+
+### 📊 回退策略
+1. **第一级**: OpenRouter (GPT-5-mini / Gemini 2.5 Flash)
+2. **第二级**: GLM-4-air (智谱AI，自动切换)
+3. **第三级**: 完整错误处理和降级服务
+
+### 🛡️ 安全性提升
+- **环境变量管理**: API密钥不再硬编码在源码中
+- **配置分离**: 开发/测试/生产环境独立配置
+- **最佳实践**: 遵循Cloudflare Workers安全规范
+
+---
+
 ## 🔧 关键修复与稳定性改进 (v3.1 - 2025年10月)
 
 ### 🚨 重大问题修复
@@ -439,4 +489,4 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 - **视觉状态指示**: 评分、分类、来源清晰标识
 - **交互式体验**: 平滑过渡效果，动态内容更新
 
-**PaperDog v3.1** - 关键稳定性修复与系统恢复 🎓🐕✨
+**PaperDog v3.2** - GLM智能回退系统，高可用AI论文分析 🎓🐕✨🔄

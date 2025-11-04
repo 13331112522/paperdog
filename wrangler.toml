@@ -24,6 +24,9 @@ crons = ["0 8 * * *"]  # Daily at 8 AM UTC
 [vars]
 # AI Service Configuration
 OPENROUTER_API_KEY = "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"
+GLM_API_KEY = "05ee2930163cef3b10b896a7a8df4c73.JBsGfDATjLorDMv0"
+GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4/"
+GLM_MODEL = "glm-4-air"
 SITE_TITLE = "PaperDog - AI论文每日更新"
 SITE_DESCRIPTION = "每日精选AI和计算机视觉最新论文研究"
 DOMAIN = "paperdog.org"

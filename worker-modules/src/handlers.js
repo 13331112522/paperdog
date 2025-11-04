@@ -1,4 +1,4 @@
-import { routes } from './config.js';
+import { routes, getGLMFallbackConfig } from './config.js';
 import {
   validateDate,
   getCachedPapers,
@@ -248,12 +248,18 @@ export async function handlePaperById(request, env, paperId) {
 
 export async function handleUpdatePapers(request, env) {
   try {
-    // Check for API key
+    // Check for API keys
     const apiKey = env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return errorResponse('OpenRouter API key not configured', 503);
     }
-    
+
+    // Get GLM fallback configuration
+    const glmFallbackConfig = getGLMFallbackConfig(env);
+    if (!glmFallbackConfig.apiKey) {
+      return errorResponse('GLM API key not configured', 503);
+    }
+
     const today = new Date().toISOString().split('T')[0];
     
     // Check rate limiting (simple implementation)
@@ -285,7 +291,7 @@ export async function handleUpdatePapers(request, env) {
     }
     
     // Step 2: Analyze papers
-    const analyzedPapers = await analyzePapers(scrapedPapers, apiKey);
+    const analyzedPapers = await analyzePapers(scrapedPapers, apiKey, glmFallbackConfig);
     
     // Step 3: Cache results
     await cachePapers(today, analyzedPapers, env);
@@ -1013,10 +1019,16 @@ export async function handleArchivePage(request, env) {
 
 export async function handleTranslate(request, env) {
   try {
-    // Check for API key
+    // Check for API keys
     const apiKey = env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return errorResponse('OpenRouter API key not configured', 503);
+    }
+
+    // Get GLM fallback configuration
+    const glmFallbackConfig = getGLMFallbackConfig(env);
+    if (!glmFallbackConfig.apiKey) {
+      return errorResponse('GLM API key not configured', 503);
     }
 
     // Parse request body
@@ -1029,8 +1041,8 @@ export async function handleTranslate(request, env) {
 
     logger.info('Starting translation request');
 
-    // Call translation function with abstract support
-    const translations = await translateAnalysis(analysis, apiKey, abstract);
+    // Call translation function with abstract support and GLM fallback
+    const translations = await translateAnalysis(analysis, apiKey, abstract, glmFallbackConfig);
 
     logger.info('Translation request completed successfully');
 

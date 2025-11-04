@@ -103,10 +103,20 @@ export const MODEL_CONFIG = {
   translation: 'google/gemini-2.5-flash-preview-09-2025'
 };
 
+// Function to get GLM fallback configuration from environment
+export function getGLMFallbackConfig(env) {
+  return {
+    apiKey: env.GLM_API_KEY,
+    baseUrl: env.GLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4/',
+    model: env.GLM_MODEL || 'glm-4-air'
+  };
+}
+
 export const MODEL_PARAMS = {
   analysis: {
     temperature: 0.3,
-    max_tokens: 2000
+    max_tokens: 2000,
+    response_format: 'json_object'
   },
   summary: {
     temperature: 0.3,
@@ -114,7 +124,7 @@ export const MODEL_PARAMS = {
   },
   translation: {
     temperature: 0.5,
-    max_tokens: 800
+    max_tokens: 1200
   }
 };
 

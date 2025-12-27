@@ -8,7 +8,7 @@ export function getHeader(activePage = 'home', visitorStats = null, showTranslat
   const navLink = (href, icon, text, isActive) => {
     const activeClass = isActive ? 'active' : '';
     return `
-      <a href="${href}" class="btn btn-outline-light btn-sm me-2 ${activeClass}">
+      <a href="${href}" class="nav-link ${activeClass}">
         <i class="${icon} me-1"></i>${text}
       </a>
     `;
@@ -16,30 +16,30 @@ export function getHeader(activePage = 'home', visitorStats = null, showTranslat
 
   // Translation button HTML (only shown on homepage where it works)
   const translationButton = showTranslationButton ? `
-        <a href="#" class="btn btn-outline-light btn-sm" onclick="toggleTranslation()" id="translate-btn" title="切换语言 / Switch Language">
+        <button class="translation-btn" onclick="toggleTranslation()" id="translate-btn" title="切换语言 / Switch Language">
           <i class="fas fa-language me-1"></i><span id="translate-text">中文</span>
-        </a>
+        </button>
   ` : '';
 
   return `
-    <nav class="navbar navbar-dark">
+    <nav class="navbar">
         <div class="container-fluid">
             <div class="d-flex justify-content-between align-items-center w-100">
                 <div class="d-flex align-items-center">
-                    <span class="navbar-brand mb-0 h1">
+                    <a href="/" class="navbar-brand">
                         <i class="fas fa-graduation-cap me-2"></i>PaperDog
-                    </span>
-                    <span class="navbar-text me-4">
+                    </a>
+                    <span class="navbar-tagline">
                         Daily AI Papers Digest
                     </span>
                 </div>
                 <div class="d-flex align-items-center">
-                    <div class="visitor-info me-4 text-end">
-                        <div class="small text-light">
+                    <div class="visitor-info me-4">
+                        <div class="visitor-stats">
                             <i class="fas fa-users me-1"></i>
                             Today: ${visitorInfo.today} | Total: ${visitorInfo.total}
                         </div>
-                        <div class="small text-light opacity-75">
+                        <div class="visitor-label">
                             ${visitorInfo.displayText}
                         </div>
                     </div>
@@ -111,133 +111,261 @@ export function getDualColumnHTML(papers = [], dailyReport = null, formattedStat
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PaperDog - AI Papers Daily Digest</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
+        :root {
+            /* Color Palette - Indigo based */
+            --color-primary-50: #EEF2FF;
+            --color-primary-100: #E0E7FF;
+            --color-primary-200: #C7D2FE;
+            --color-primary-500: #6366F1;
+            --color-primary-600: #4F46E5;
+            --color-primary-700: #4338CA;
+
+            /* Neutral Grays */
+            --color-gray-50: #F9FAFB;
+            --color-gray-100: #F3F4F6;
+            --color-gray-200: #E5E7EB;
+            --color-gray-300: #D1D5DB;
+            --color-gray-500: #6B7280;
+            --color-gray-700: #374151;
+            --color-gray-900: #111827;
+
+            /* Spacing Scale */
+            --spacing-1: 0.25rem;
+            --spacing-2: 0.5rem;
+            --spacing-3: 0.75rem;
+            --spacing-4: 1rem;
+            --spacing-5: 1.25rem;
+            --spacing-6: 1.5rem;
+            --spacing-8: 2rem;
+        }
+
         body {
-            background: #f8f9fa;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--color-gray-50);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-size: 1rem;
+            line-height: 1.5;
+            color: var(--color-gray-900);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
         
         .container-fluid {
-            max-width: 1600px;
+            max-width: 1400px;
         }
-        
+
         .navbar {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #FFFFFF;
+            border-bottom: 1px solid var(--color-gray-200);
+            padding: var(--spacing-3) 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            backdrop-filter: blur(8px);
+            background: rgba(255, 255, 255, 0.95);
+        }
+
+        .navbar-brand {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--color-primary-600);
+            text-decoration: none;
+            transition: color 0.15s ease;
+        }
+
+        .navbar-brand:hover {
+            color: var(--color-primary-700);
+        }
+
+        .navbar-tagline {
+            font-size: 0.875rem;
+            color: var(--color-gray-500);
+            margin-left: var(--spacing-4);
         }
 
         .visitor-info {
-            font-size: 0.85rem;
-            line-height: 1.2;
+            font-size: 0.8125rem;
+            line-height: 1.4;
         }
 
-        .nav-links .btn {
-            border-width: 1px;
-            font-size: 0.8rem;
-            padding: 0.25rem 0.5rem;
-            transition: all 0.3s ease;
+        .visitor-stats {
+            color: var(--color-gray-700);
+            font-weight: 500;
         }
 
-        .nav-links .btn:hover {
-            background: rgba(255, 255, 255, 0.2) !important;
-            transform: translateY(-1px);
+        .visitor-label {
+            color: var(--color-gray-500);
+            font-size: 0.75rem;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: var(--spacing-1);
+        }
+
+        .nav-link {
+            font-size: 0.9375rem;
+            font-weight: 500;
+            color: var(--color-gray-700);
+            text-decoration: none;
+            padding: var(--spacing-2) var(--spacing-3);
+            border-radius: 6px;
+            transition: all 0.15s ease;
+        }
+
+        .nav-link:hover {
+            background: var(--color-gray-100);
+            color: var(--color-gray-900);
+        }
+
+        .nav-link.active {
+            background: var(--color-primary-50);
+            color: var(--color-primary-600);
+        }
+
+        .translation-btn {
+            background: transparent;
+            border: 1px solid var(--color-gray-300);
+            color: var(--color-gray-700);
+            font-size: 0.875rem;
+            font-weight: 500;
+            padding: var(--spacing-2) var(--spacing-3);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .translation-btn:hover {
+            background: var(--color-gray-100);
+            border-color: var(--color-gray-400);
         }
         
         .column-content {
             min-height: 600px;
-            padding: 1.5rem;
-            background: #f6f8fc;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-            border: 1px solid #e9ecef;
+            padding: var(--spacing-6);
+            background: #FFFFFF;
+            border-radius: 12px;
+            margin-bottom: var(--spacing-4);
+            border: 1px solid var(--color-gray-200);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
-        
+
         #paper-content, #analysis-content {
             overflow-wrap: break-word;
             word-wrap: break-word;
-            font-size: 0.95em;
+            font-size: 1rem;
             line-height: 1.6;
         }
-        
+
         #paper-content h1, #paper-content h2, #paper-content h3,
         #analysis-content h1, #analysis-content h2, #analysis-content h3 {
-            font-size: 1.15em;
-            margin-top: 1.2rem;
-            margin-bottom: 0.5rem;
-            color: #2c3e50;
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: var(--spacing-5);
+            margin-bottom: var(--spacing-3);
+            color: var(--color-gray-900);
+            line-height: 1.4;
         }
-        
+
+        #paper-content h5, #analysis-content h5 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--color-gray-900);
+            margin-bottom: var(--spacing-3);
+        }
+
+        #paper-content h6, #analysis-content h6 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--color-gray-700);
+            margin-top: var(--spacing-4);
+            margin-bottom: var(--spacing-2);
+        }
+
+        #paper-content p, #analysis-content p {
+            margin-bottom: var(--spacing-3);
+            color: var(--color-gray-700);
+        }
+
         #paper-content table, #analysis-content table {
             width: 100%;
             table-layout: fixed;
-            font-size: 0.9em;
+            font-size: 0.9375rem;
         }
-        
+
         #paper-content pre, #analysis-content pre,
         #paper-content code, #analysis-content code {
-            font-size: 0.85em;
+            font-size: 0.875rem;
             overflow-x: auto;
-            background: #f8f9fa;
-            padding: 0.2rem 0.4rem;
-            border-radius: 4px;
+            background: var(--color-gray-100);
+            padding: var(--spacing-1) var(--spacing-2);
+            border-radius: 6px;
         }
-        
+
         .side-panel {
-            background: #f6f8fc;
+            background: #FFFFFF;
             border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
-            padding: 1.5rem 1rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            padding: var(--spacing-5);
             min-height: 100%;
             max-height: 80vh;
             overflow-y: auto;
-            border: 1px solid #e9ecef;
+            border: 1px solid var(--color-gray-200);
         }
-        
+
         .paper-card {
-            transition: box-shadow 0.2s;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             cursor: pointer;
-            border: 1px solid #dee2e6;
+            border: 1px solid var(--color-gray-200);
         }
-        
+
         .paper-card:hover {
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+            border-color: var(--color-primary-200);
+            transform: translateY(-2px);
         }
-        
+
         .paper-card.today {
-            border-color: #007bff;
-            background: #f8f9ff;
+            border-color: var(--color-primary-200);
+            background: var(--color-primary-50);
         }
-        
+
         .paper-abstract {
-            font-size: 0.85em;
-            color: #6c757d;
-            line-height: 1.4;
+            font-size: 0.875rem;
+            color: var(--color-gray-500);
+            line-height: 1.5;
             max-height: 3.2em;
             overflow: hidden;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
         }
-        
+
         .update-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--color-primary-600);
             border: none;
             border-radius: 8px;
-            padding: 0.75rem 1rem;
+            padding: var(--spacing-3) var(--spacing-4);
             font-weight: 500;
-            transition: all 0.3s ease;
+            font-size: 0.9375rem;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            color: #FFFFFF;
         }
-        
+
         .update-btn:hover:not(:disabled) {
+            background: var(--color-primary-700);
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
         }
-        
+
         .update-btn:disabled {
-            background: #6c757d;
+            background: var(--color-gray-500);
         }
         
         .spinner {
@@ -289,54 +417,117 @@ export function getDualColumnHTML(papers = [], dailyReport = null, formattedStat
         }
         
         .score-badge {
-            background: #28a745;
-            color: white;
-            padding: 0.25rem 0.5rem;
-            border-radius: 12px;
-            font-size: 0.75rem;
+            background: var(--color-primary-50);
+            color: var(--color-primary-700);
+            padding: var(--spacing-1) var(--spacing-2);
+            border-radius: 6px;
+            font-size: 0.8125rem;
             font-weight: 500;
+            border: 1px solid var(--color-primary-200);
         }
-        
+
         .category-badge {
-            background: #667eea;
-            color: white;
-            padding: 0.25rem 0.5rem;
-            border-radius: 12px;
-            font-size: 0.75rem;
+            background: var(--color-primary-50);
+            color: var(--color-primary-700);
+            padding: var(--spacing-1) var(--spacing-2);
+            border-radius: 6px;
+            font-size: 0.8125rem;
             font-weight: 500;
+            border: 1px solid var(--color-primary-200);
         }
-        
+
         .paper-stats {
-            font-size: 0.8rem;
-            color: #6c757d;
+            font-size: 0.8125rem;
+            color: var(--color-gray-500);
         }
 
         .view-count {
-            font-size: 0.75rem;
-            color: #6c757d;
+            font-size: 0.8125rem;
+            color: var(--color-gray-700);
             display: flex;
             align-items: center;
-            gap: 0.25rem;
-            background: rgba(0, 123, 255, 0.05);
-            padding: 0.125rem 0.375rem;
-            border-radius: 8px;
-            border: 1px solid rgba(0, 123, 255, 0.1);
+            gap: var(--spacing-1);
+            background: var(--color-gray-50);
+            padding: var(--spacing-1) var(--spacing-2);
+            border-radius: 6px;
+            border: 1px solid var(--color-gray-200);
         }
 
         .view-count i {
-            font-size: 0.8rem;
-            color: #007bff;
+            font-size: 0.875rem;
+            color: var(--color-primary-600);
         }
 
         .view-badge {
-            background: rgba(0, 123, 255, 0.1);
-            color: #007bff;
-            padding: 0.125rem 0.375rem;
+            background: var(--color-primary-50);
+            color: var(--color-primary-700);
+            padding: var(--spacing-1) var(--spacing-2);
             border-radius: 6px;
-            font-size: 0.7rem;
+            font-size: 0.75rem;
             font-weight: 500;
             min-width: 20px;
             text-align: center;
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--color-gray-900);
+            line-height: 1.4;
+        }
+
+        /* Dark Mode Support */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --color-gray-50: #111827;
+                --color-gray-100: #1F2937;
+                --color-gray-200: #374151;
+                --color-gray-300: #4B5563;
+                --color-gray-500: #9CA3AF;
+                --color-gray-700: #D1D5DB;
+                --color-gray-900: #F9FAFB;
+
+                --color-primary-50: #312E81;
+                --color-primary-100: #3730A3;
+                --color-primary-200: #4338CA;
+                --color-primary-500: #818CF8;
+                --color-primary-600: #6366F1;
+                --color-primary-700: #4F46E5;
+            }
+
+            body {
+                background: #0F172A;
+                color: var(--color-gray-900);
+            }
+
+            .navbar {
+                background: rgba(15, 23, 42, 0.95);
+                border-bottom-color: var(--color-gray-200);
+            }
+
+            .column-content,
+            .side-panel {
+                background: #1F2937;
+                border-color: var(--color-gray-200);
+            }
+
+            #paper-content p, #analysis-content p {
+                color: var(--color-gray-700);
+            }
+
+            .paper-card {
+                border-color: var(--color-gray-200);
+                background: #1F2937;
+            }
+
+            .paper-card:hover {
+                border-color: var(--color-primary-200);
+            }
+
+            #paper-content pre, #analysis-content pre,
+            #paper-content code, #analysis-content code {
+                background: var(--color-gray-800);
+            }
         }
     </style>
 </head>

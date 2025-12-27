@@ -2,6 +2,42 @@
 
 This document explains how to use various MCP (Model Context Protocol) services with the PaperDog blog application for development, debugging, and research paper access.
 
+## 🎨 Design System (v4.0)
+
+PaperDog uses a modern, professional design system inspired by Hugging Face, Vercel, and Hashnode.
+
+### Key Design Principles
+- **Typography**: Inter font with optimized font weights (400, 500, 600, 700)
+- **Color Palette**: Professional indigo (#6366F1) with refined grays
+- **Spacing**: Consistent spacing scale based on 0.25rem increments
+- **Components**: Subtle borders (1px), light shadows, smooth transitions
+- **Dark Mode**: System preference detection via `@media (prefers-color-scheme: dark)`
+
+### File Structure
+- `worker-modules/src/dual-column-templates.js` - Main page templates with shared header
+- `worker-modules/src/blog-templates.js` - Blog listing and post detail templates
+- `worker-modules/src/blog-fetcher.js` - WordPress.com REST API integration
+
+### Design Tokens
+```css
+/* Primary Colors */
+--color-primary-600: #4F46E5;  /* Main brand color */
+--color-primary-50: #EEF2FF;   /* Light backgrounds */
+
+/* Neutral Grays */
+--color-gray-50: #F9FAFB;      /* Page background */
+--color-gray-200: #E5E7EB;     /* Borders */
+--color-gray-700: #374151;     /* Body text */
+--color-gray-900: #111827;     /* Headings */
+```
+
+### Navigation
+The `getHeader()` function provides consistent navigation across all pages:
+- Sticky white navbar with blur effect
+- Active page highlighting
+- Translation button (homepage only)
+- Responsive design
+
 ## 🚀 PaperDog Research MCP Integration
 
 The PaperDog MCP service provides access to thousands of AI research papers from arXiv and HuggingFace with comprehensive AI-generated analysis.

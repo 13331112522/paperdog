@@ -24,198 +24,350 @@ export function getBlogListHTML(posts = [], visitorStats = null) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Blog - PaperDog</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
+        :root {
+            /* Color Palette - Indigo based */
+            --color-primary-50: #EEF2FF;
+            --color-primary-100: #E0E7FF;
+            --color-primary-200: #C7D2FE;
+            --color-primary-500: #6366F1;
+            --color-primary-600: #4F46E5;
+            --color-primary-700: #4338CA;
+
+            /* Neutral Grays */
+            --color-gray-50: #F9FAFB;
+            --color-gray-100: #F3F4F6;
+            --color-gray-200: #E5E7EB;
+            --color-gray-300: #D1D5DB;
+            --color-gray-500: #6B7280;
+            --color-gray-700: #374151;
+            --color-gray-900: #111827;
+
+            /* Spacing Scale */
+            --spacing-1: 0.25rem;
+            --spacing-2: 0.5rem;
+            --spacing-3: 0.75rem;
+            --spacing-4: 1rem;
+            --spacing-5: 1.25rem;
+            --spacing-6: 1.5rem;
+            --spacing-8: 2rem;
+        }
+
         body {
-            background: #f8f9fa;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--color-gray-50);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-size: 1rem;
+            line-height: 1.5;
+            color: var(--color-gray-900);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         .navbar {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #FFFFFF;
+            border-bottom: 1px solid var(--color-gray-200);
+            padding: var(--spacing-3) 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            backdrop-filter: blur(8px);
+            background: rgba(255, 255, 255, 0.95);
+        }
+
+        .navbar-brand {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--color-primary-600);
+            text-decoration: none;
+            transition: color 0.15s ease;
+        }
+
+        .navbar-brand:hover {
+            color: var(--color-primary-700);
+        }
+
+        .navbar-tagline {
+            font-size: 0.875rem;
+            color: var(--color-gray-500);
+            margin-left: var(--spacing-4);
         }
 
         .visitor-info {
-            font-size: 0.85rem;
-            line-height: 1.2;
+            font-size: 0.8125rem;
+            line-height: 1.4;
         }
 
-        .nav-links .btn {
-            border-width: 1px;
-            font-size: 0.8rem;
-            padding: 0.25rem 0.5rem;
-            transition: all 0.3s ease;
+        .visitor-stats {
+            color: var(--color-gray-700);
+            font-weight: 500;
         }
 
-        .nav-links .btn:hover {
-            background: rgba(255, 255, 255, 0.2) !important;
-            transform: translateY(-1px);
+        .visitor-label {
+            color: var(--color-gray-500);
+            font-size: 0.75rem;
         }
 
-        .nav-links .btn.active {
-            background: rgba(255, 255, 255, 0.3) !important;
+        .nav-links {
+            display: flex;
+            gap: var(--spacing-1);
+        }
+
+        .nav-link {
+            font-size: 0.9375rem;
+            font-weight: 500;
+            color: var(--color-gray-700);
+            text-decoration: none;
+            padding: var(--spacing-2) var(--spacing-3);
+            border-radius: 6px;
+            transition: all 0.15s ease;
+        }
+
+        .nav-link:hover {
+            background: var(--color-gray-100);
+            color: var(--color-gray-900);
+        }
+
+        .nav-link.active {
+            background: var(--color-primary-50);
+            color: var(--color-primary-600);
         }
 
         .blog-card {
-            background: white;
-            border-radius: 15px;
-            padding: 1.5rem;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            background: #FFFFFF;
+            border: 1px solid var(--color-gray-200);
+            border-radius: 12px;
+            padding: var(--spacing-6);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             height: 100%;
-            border: none;
         }
 
         .blog-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+            border-color: var(--color-primary-200);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+            transform: translateY(-2px);
         }
 
         .blog-featured-image {
             width: 100%;
             height: 200px;
             object-fit: cover;
-            border-radius: 10px;
-            margin-bottom: 1rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px;
+            margin-bottom: var(--spacing-4);
+            background: linear-gradient(135deg, var(--color-primary-500) 0%, var(--color-primary-700) 100%);
         }
 
         .blog-title {
-            font-size: 1.3rem;
+            font-size: 1.25rem;
             font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 0.75rem;
+            color: var(--color-gray-900);
+            margin-bottom: var(--spacing-3);
             line-height: 1.4;
         }
 
         .blog-title a {
             color: inherit;
             text-decoration: none;
-            transition: color 0.3s ease;
+            transition: color 0.15s ease;
         }
 
         .blog-title a:hover {
-            color: #667eea;
+            color: var(--color-primary-600);
         }
 
         .blog-excerpt {
-            color: #6c757d;
-            font-size: 0.95rem;
+            color: var(--color-gray-500);
+            font-size: 0.9375rem;
             line-height: 1.6;
-            margin-bottom: 1rem;
+            margin-bottom: var(--spacing-4);
         }
 
         .blog-meta {
             display: flex;
             flex-wrap: wrap;
-            gap: 0.5rem;
+            gap: var(--spacing-2);
             align-items: center;
-            font-size: 0.85rem;
-            color: #6c757d;
-            margin-bottom: 1rem;
+            font-size: 0.875rem;
+            color: var(--color-gray-500);
+            margin-bottom: var(--spacing-4);
         }
 
         .blog-date {
             display: flex;
             align-items: center;
-            gap: 0.3rem;
+            gap: var(--spacing-2);
         }
 
         .blog-categories {
             display: flex;
             flex-wrap: wrap;
-            gap: 0.4rem;
-            margin-bottom: 1rem;
+            gap: var(--spacing-2);
+            margin-bottom: var(--spacing-4);
         }
 
         .category-badge {
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            color: white;
-            padding: 0.25rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
+            background: var(--color-primary-50);
+            color: var(--color-primary-700);
+            padding: var(--spacing-1) var(--spacing-3);
+            border-radius: 6px;
+            font-size: 0.8125rem;
             font-weight: 500;
+            border: 1px solid var(--color-primary-200);
         }
 
         .blog-tags {
             display: flex;
             flex-wrap: wrap;
-            gap: 0.4rem;
-            margin-bottom: 1rem;
+            gap: var(--spacing-2);
+            margin-bottom: var(--spacing-4);
         }
 
         .tag-badge {
-            background: #e9ecef;
-            color: #495057;
-            padding: 0.2rem 0.6rem;
-            border-radius: 15px;
-            font-size: 0.75rem;
+            background: var(--color-gray-100);
+            color: var(--color-gray-700);
+            padding: var(--spacing-1) var(--spacing-2);
+            border-radius: 9999px;
+            font-size: 0.8125rem;
+            border: 1px solid var(--color-gray-200);
         }
 
         .read-more-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--color-primary-600);
             color: white;
             border: none;
-            padding: 0.5rem 1.25rem;
-            border-radius: 20px;
+            padding: var(--spacing-2) var(--spacing-5);
+            border-radius: 8px;
             font-weight: 500;
-            transition: all 0.3s ease;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .read-more-btn:hover {
+            background: var(--color-primary-700);
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
             color: white;
         }
 
         .page-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 3rem 0;
-            margin-bottom: 2rem;
-            border-radius: 0 0 20px 20px;
+            background: linear-gradient(180deg, #FFFFFF 0%, var(--color-gray-50) 100%);
+            color: var(--color-gray-900);
+            padding: var(--spacing-16) 0 var(--spacing-8);
+            margin-bottom: var(--spacing-8);
+            border-bottom: 1px solid var(--color-gray-200);
         }
 
         .page-header h1 {
+            font-size: 2.5rem;
             font-weight: 700;
-            margin-bottom: 0.5rem;
+            margin-bottom: var(--spacing-2);
+            letter-spacing: -0.02em;
         }
 
         .page-header p {
-            opacity: 0.9;
+            color: var(--color-gray-500);
+            font-size: 1.125rem;
             margin-bottom: 0;
         }
 
         .no-posts {
             text-align: center;
-            padding: 4rem 2rem;
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            padding: var(--spacing-16) var(--spacing-8);
+            background: #FFFFFF;
+            border-radius: 12px;
+            border: 1px solid var(--color-gray-200);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
         }
 
         .no-posts i {
             font-size: 4rem;
-            color: #667eea;
-            margin-bottom: 1rem;
+            color: var(--color-primary-600);
+            margin-bottom: var(--spacing-4);
+        }
+
+        .no-posts h3 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--color-gray-900);
+            margin-bottom: var(--spacing-2);
         }
 
         footer {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 2rem 0;
-            margin-top: 4rem;
+            background: var(--color-gray-900);
+            color: var(--color-gray-400);
+            padding: var(--spacing-8) 0;
+            margin-top: var(--spacing-16);
             text-align: center;
+        }
+
+        footer p {
+            margin-bottom: var(--spacing-1);
+        }
+
+        footer .small {
+            font-size: 0.875rem;
+            color: var(--color-gray-500);
+        }
+
+        /* Dark Mode Support */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --color-gray-50: #111827;
+                --color-gray-100: #1F2937;
+                --color-gray-200: #374151;
+                --color-gray-300: #4B5563;
+                --color-gray-500: #9CA3AF;
+                --color-gray-700: #D1D5DB;
+                --color-gray-900: #F9FAFB;
+
+                --color-primary-50: #312E81;
+                --color-primary-100: #3730A3;
+                --color-primary-200: #4338CA;
+                --color-primary-500: #818CF8;
+                --color-primary-600: #6366F1;
+                --color-primary-700: #4F46E5;
+            }
+
+            body {
+                background: #0F172A;
+            }
+
+            .navbar {
+                background: rgba(15, 23, 42, 0.95);
+                border-bottom-color: var(--color-gray-200);
+            }
+
+            .blog-card,
+            .no-posts {
+                background: #1F2937;
+                border-color: var(--color-gray-200);
+            }
+
+            .page-header {
+                background: linear-gradient(180deg, #1F2937 0%, #0F172A 100%);
+                border-bottom-color: var(--color-gray-200);
+            }
+
+            footer {
+                background: #0F172A;
+            }
         }
 
         @media (max-width: 768px) {
             .blog-card {
-                margin-bottom: 1.5rem;
+                margin-bottom: var(--spacing-6);
             }
 
             .page-header {
-                padding: 2rem 0;
+                padding: var(--spacing-8) 0;
+            }
+
+            .page-header h1 {
+                font-size: 2rem;
             }
         }
     </style>
@@ -392,54 +544,136 @@ export function getBlogPostHTML(post, visitorStats = null) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${title} - PaperDog Blog</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
+        :root {
+            /* Color Palette - Indigo based */
+            --color-primary-50: #EEF2FF;
+            --color-primary-100: #E0E7FF;
+            --color-primary-200: #C7D2FE;
+            --color-primary-500: #6366F1;
+            --color-primary-600: #4F46E5;
+            --color-primary-700: #4338CA;
+
+            /* Neutral Grays */
+            --color-gray-50: #F9FAFB;
+            --color-gray-100: #F3F4F6;
+            --color-gray-200: #E5E7EB;
+            --color-gray-300: #D1D5DB;
+            --color-gray-500: #6B7280;
+            --color-gray-700: #374151;
+            --color-gray-900: #111827;
+
+            /* Spacing Scale */
+            --spacing-1: 0.25rem;
+            --spacing-2: 0.5rem;
+            --spacing-3: 0.75rem;
+            --spacing-4: 1rem;
+            --spacing-5: 1.25rem;
+            --spacing-6: 1.5rem;
+            --spacing-8: 2rem;
+        }
+
         body {
-            background: #f8f9fa;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--color-gray-50);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-size: 1rem;
+            line-height: 1.5;
+            color: var(--color-gray-900);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         .navbar {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #FFFFFF;
+            border-bottom: 1px solid var(--color-gray-200);
+            padding: var(--spacing-3) 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            backdrop-filter: blur(8px);
+            background: rgba(255, 255, 255, 0.95);
+        }
+
+        .navbar-brand {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--color-primary-600);
+            text-decoration: none;
+            transition: color 0.15s ease;
+        }
+
+        .navbar-brand:hover {
+            color: var(--color-primary-700);
+        }
+
+        .navbar-tagline {
+            font-size: 0.875rem;
+            color: var(--color-gray-500);
+            margin-left: var(--spacing-4);
         }
 
         .visitor-info {
-            font-size: 0.85rem;
-            line-height: 1.2;
+            font-size: 0.8125rem;
+            line-height: 1.4;
         }
 
-        .nav-links .btn {
-            border-width: 1px;
-            font-size: 0.8rem;
-            padding: 0.25rem 0.5rem;
-            transition: all 0.3s ease;
+        .visitor-stats {
+            color: var(--color-gray-700);
+            font-weight: 500;
         }
 
-        .nav-links .btn:hover {
-            background: rgba(255, 255, 255, 0.2) !important;
-            transform: translateY(-1px);
+        .visitor-label {
+            color: var(--color-gray-500);
+            font-size: 0.75rem;
         }
 
-        .nav-links .btn.active {
-            background: rgba(255, 255, 255, 0.3) !important;
+        .nav-links {
+            display: flex;
+            gap: var(--spacing-1);
+        }
+
+        .nav-link {
+            font-size: 0.9375rem;
+            font-weight: 500;
+            color: var(--color-gray-700);
+            text-decoration: none;
+            padding: var(--spacing-2) var(--spacing-3);
+            border-radius: 6px;
+            transition: all 0.15s ease;
+        }
+
+        .nav-link:hover {
+            background: var(--color-gray-100);
+            color: var(--color-gray-900);
+        }
+
+        .nav-link.active {
+            background: var(--color-primary-50);
+            color: var(--color-primary-600);
         }
 
         .blog-post-container {
-            background: white;
-            border-radius: 15px;
-            padding: 3rem;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-            margin-top: 2rem;
-            margin-bottom: 2rem;
+            background: #FFFFFF;
+            border: 1px solid var(--color-gray-200);
+            border-radius: 12px;
+            padding: var(--spacing-16);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            margin-top: var(--spacing-8);
+            margin-bottom: var(--spacing-8);
         }
 
         .blog-post-title {
             font-size: 2.5rem;
             font-weight: 700;
-            color: #2c3e50;
-            margin-bottom: 1rem;
-            line-height: 1.3;
+            color: var(--color-gray-900);
+            margin-bottom: var(--spacing-4);
+            line-height: 1.2;
+            letter-spacing: -0.02em;
         }
 
         .blog-post-meta {

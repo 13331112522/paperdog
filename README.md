@@ -37,9 +37,12 @@
 ### 🎨 用户体验优化
 - 📱 **响应式设计** - 桌面端和移动端完美适配
 - 🖼️ **双栏布局** - 论文列表+详细分析视图
+- 🎨 **现代UI设计** - Inter字体、简洁白色导航、indigo配色方案
+- 🌓 **暗色模式** - 系统偏好自动适配暗色主题
 - 📊 **视觉状态指示** - 评分徽章、分类标签、来源标识
 - 🔄 **交互式体验** - 点击查看详情，平滑过渡效果
 - 📊 **访问统计** - 隐私合规的访客统计系统
+- 📝 **博客集成** - 无头WordPress API博客系统集成，分享见解和更新
 
 ## 🏗️ 技术架构
 
@@ -220,6 +223,9 @@ target/
 │       ├── paper-analyzer.js     # AI分析模块
 │       ├── blog-generator.js     # 博客内容生成
 │       ├── templates.js          # 前端模板
+│       ├── dual-column-templates.js  # 双栏布局模板（含共享header）
+│       ├── blog-templates.js     # 博客页面模板
+│       ├── blog-fetcher.js       # WordPress博客fetcher
 │       ├── utils.js              # 工具函数
 │       ├── archive-manager.js    # 归档管理核心
 │       ├── archive-exporter.js   # 导出功能模块
@@ -325,7 +331,11 @@ PaperDog 支持 Chrome DevTools MCP 集成，便于开发和调试：
 - **项目配置**: `.claude/settings.local.json`（仅当前项目可用）
 
 ### API接口
-- `GET /` - 博客首页
+- `GET /` - 主页（论文展示）
+- `GET /blog` - 博客列表页
+- `GET /blog/:slug` - 单篇博客文章
+- `GET /about` - 关于页面
+- `GET /archive` - 归档页面
 - `GET /api/papers` - 获取论文列表
 - `GET /api/papers/:date` - 获取特定日期论文
 - `GET /api/papers/:id` - 获取单篇论文详情
@@ -490,3 +500,103 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 - **交互式体验**: 平滑过渡效果，动态内容更新
 
 **PaperDog v3.2** - GLM智能回退系统，高可用AI论文分析 🎓🐕✨🔄
+
+---
+
+## 🎨 设计系统 (v4.0 - 2025年12月)
+
+### 🌟 现代设计语言
+PaperDog采用现代专业的设计系统，灵感来自Hugging Face、Vercel和Hashnode等顶尖科技平台。
+
+#### 字体系统
+- **主字体**: Inter (Google Fonts)
+- **后备字体**: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto
+- **字重**: 400 (正文), 500 (中等), 600 (半粗), 700 (粗体)
+- **字体大小**:
+  - 页面标题: 2.5rem (40px)
+  - 卡片标题: 1.25rem (20px)
+  - 正文: 1rem (16px)
+  - 辅助文本: 0.875rem (14px)
+  - 标签: 0.8125rem (13px)
+
+#### 配色方案
+**主色调 (Indigo)**:
+- Primary-50: #EEF2FF
+- Primary-100: #E0E7FF
+- Primary-200: #C7D2FE
+- Primary-500: #6366F1
+- Primary-600: #4F46E5
+- Primary-700: #4338CA
+
+**中性灰**:
+- Gray-50: #F9FAFB (背景)
+- Gray-100: #F3F4F6
+- Gray-200: #E5E7EB (边框)
+- Gray-500: #6B7280 (辅助文本)
+- Gray-700: #374151 (正文)
+- Gray-900: #111827 (标题)
+
+#### 组件设计
+**导航栏**:
+- 白色背景 (#FFFFFF)
+- 底部边框 (1px #E5E7EB)
+- 背景模糊效果 (backdrop-filter: blur(8px))
+- 粘性定位 (sticky)
+- 透明度 95%
+
+**卡片**:
+- 白色背景
+- 微妙边框 (1px #E5E7EB)
+- 轻阴影 (0 1px 3px rgba(0,0,0,0.05))
+- 悬停效果:
+  - 边框颜色变化 (#C7D2FE)
+  - 阴影增强 (0 4px 12px rgba(99, 102, 241, 0.1))
+  - 轻微上移 (translateY(-2px))
+
+**徽章**:
+- 分类徽章: Primary-50背景, Primary-700文本, Primary-200边框
+- 标签: Gray-100背景, Gray-700文本, Gray-200边框
+- 圆角: 6px (分类), 9999px (标签)
+
+#### 间距系统
+基于0.25rem递增的间距比例:
+- Spacing-1: 0.25rem (4px)
+- Spacing-2: 0.5rem (8px)
+- Spacing-3: 0.75rem (12px)
+- Spacing-4: 1rem (16px)
+- Spacing-5: 1.25rem (20px)
+- Spacing-6: 1.5rem (24px)
+- Spacing-8: 2rem (32px)
+
+#### 暗色模式
+系统自动检测用户OS偏好，支持暗色主题:
+- 背景色反转: #111827, #1F2937
+- 文本色反转: #F9FAFB, #D1D5DB
+- 边框和阴影适配
+- 保持视觉层次和可读性
+
+#### 动画与过渡
+- **缓动函数**: cubic-bezier(0.4, 0, 0.2, 1)
+- **过渡时长**: 0.15s (颜色), 0.2s (变换)
+- **悬停效果**:
+  - 阴影增强
+  - 边框颜色变化
+  - 轻微位移 (-2px)
+
+### 📝 博客集成特性
+- **无头WordPress**: 通过WordPress.com REST API集成
+- **缓存策略**: 列表15分钟, 文章1小时
+- **响应式设计**: 移动端优先,桌面端优化
+- **SEO友好**: 语义化HTML, meta标签
+- **社交分享**: Twitter, Facebook, LinkedIn分享按钮
+
+### 🔧 技术实现
+- **CSS自定义属性**: 使用CSS变量管理颜色和间距
+- **移动优先**: 响应式断点 @media (max-width: 768px)
+- **浏览器兼容**: 支持现代浏览器 (Chrome, Firefox, Safari, Edge)
+- **无障碍**: WCAG 2.1 AA级标准, 语义化HTML
+- **性能优化**: 字体预连接, CDN加载, 最小化重排
+
+---
+
+**PaperDog v4.0** - 现代设计系统, 专业论文展示平台 🎓🐕✨🎨

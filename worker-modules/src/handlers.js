@@ -22,6 +22,8 @@ import { getDualColumnHTML } from './dual-column-templates.js';
 import { filterAndSortPapers, generateScoringReport } from './paper-scoring.js';
 import { archivePapers } from './archive-manager.js';
 import { trackVisitor, getVisitorStats, formatVisitorStats } from './visitor-counter.js';
+import { fetchBlogPosts, fetchBlogPostBySlug } from './blog-fetcher.js';
+import { getBlogListHTML, getBlogPostHTML } from './blog-templates.js';
 
 const logger = {
   info: (msg, data = {}) => console.log(`[HANDLER] ${msg}`, data),
@@ -1058,6 +1060,62 @@ export async function handleTranslate(request, env) {
   }
 }
 
+// Blog Handlers
+export async function handleBlog(request, env) {
+  try {
+    logger.info('Handling blog page request');
+
+    // Track visitor
+    await trackVisitor(env);
+
+    // Get visitor stats
+    const visitorStats = await getVisitorStats(env);
+    const formattedStats = formatVisitorStats(visitorStats);
+
+    // Fetch blog posts from WordPress
+    const posts = await fetchBlogPosts(env, { perPage: 12 });
+
+    logger.info(`Fetched ${posts.length} blog posts`);
+
+    // Return HTML response
+    const html = getBlogListHTML(posts, formattedStats);
+    return htmlResponse(html);
+  } catch (error) {
+    logger.error('Error in blog handler:', error);
+    return errorResponse(`Failed to load blog: ${error.message}`, error.statusCode || 500);
+  }
+}
+
+export async function handleBlogPost(request, env, slug) {
+  try {
+    logger.info('Handling blog post request', { slug });
+
+    // Track visitor
+    await trackVisitor(env);
+
+    // Get visitor stats
+    const visitorStats = await getVisitorStats(env);
+    const formattedStats = formatVisitorStats(visitorStats);
+
+    // Fetch blog post from WordPress
+    const post = await fetchBlogPostBySlug(env, slug);
+
+    if (!post) {
+      logger.warn('Blog post not found', { slug });
+      return errorResponse('Blog post not found', 404);
+    }
+
+    logger.info('Fetched blog post', { slug, title: post.title });
+
+    // Return HTML response
+    const html = getBlogPostHTML(post, formattedStats);
+    return htmlResponse(html);
+  } catch (error) {
+    logger.error('Error in blog post handler:', error);
+    return errorResponse(`Failed to load blog post: ${error.message}`, error.statusCode || 500);
+  }
+}
+
 // Export all handlers for easy access
 export const handlers = {
   handleRoot,
@@ -1069,6 +1127,8 @@ export const handlers = {
   handleSearch,
   handleRSSFeed,
   handleAbout,
+  handleBlog,
+  handleBlogPost,
   handleScoringReport,
   handleTrackPaperView,
   handleArchivePage,

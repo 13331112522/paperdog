@@ -1,5 +1,62 @@
 import { formatDate } from './utils.js';
 
+// Generate shared header HTML
+export function getHeader(activePage = 'home', visitorStats = null, showTranslationButton = false) {
+  const visitorInfo = visitorStats || { today: '0', total: '0', displayText: 'Visitor stats' };
+
+  // Helper function to generate nav link with active state
+  const navLink = (href, icon, text, isActive) => {
+    const activeClass = isActive ? 'active' : '';
+    return `
+      <a href="${href}" class="btn btn-outline-light btn-sm me-2 ${activeClass}">
+        <i class="${icon} me-1"></i>${text}
+      </a>
+    `;
+  };
+
+  // Translation button HTML (only shown on homepage where it works)
+  const translationButton = showTranslationButton ? `
+        <a href="#" class="btn btn-outline-light btn-sm" onclick="toggleTranslation()" id="translate-btn" title="切换语言 / Switch Language">
+          <i class="fas fa-language me-1"></i><span id="translate-text">中文</span>
+        </a>
+  ` : '';
+
+  return `
+    <nav class="navbar navbar-dark">
+        <div class="container-fluid">
+            <div class="d-flex justify-content-between align-items-center w-100">
+                <div class="d-flex align-items-center">
+                    <span class="navbar-brand mb-0 h1">
+                        <i class="fas fa-graduation-cap me-2"></i>PaperDog
+                    </span>
+                    <span class="navbar-text me-4">
+                        Daily AI Papers Digest
+                    </span>
+                </div>
+                <div class="d-flex align-items-center">
+                    <div class="visitor-info me-4 text-end">
+                        <div class="small text-light">
+                            <i class="fas fa-users me-1"></i>
+                            Today: ${visitorInfo.today} | Total: ${visitorInfo.total}
+                        </div>
+                        <div class="small text-light opacity-75">
+                            ${visitorInfo.displayText}
+                        </div>
+                    </div>
+                    <div class="nav-links">
+                        ${navLink('/', 'fas fa-home', 'Home', activePage === 'home')}
+                        ${navLink('/archive', 'fas fa-archive', 'Archive', activePage === 'archive')}
+                        ${navLink('/blog', 'fas fa-book', 'Blog', activePage === 'blog')}
+                        ${navLink('/about', 'fas fa-info-circle', 'About', activePage === 'about')}
+                        ${translationButton}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+  `;
+}
+
 // Helper function to sanitize Chinese translation content
 function sanitizeChineseContent(content) {
   if (!content || typeof content !== 'string') {
@@ -45,10 +102,9 @@ function sanitizeChineseContent(content) {
   return content;
 }
 
-export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats = null) {
+export function getDualColumnHTML(papers = [], dailyReport = null, formattedStats = null) {
   const safeReportJson = JSON.stringify(dailyReport).replace(/</g, '\u003c');
-  const visitorInfo = visitorStats || { today: '0', total: '0', displayText: 'Visitor stats' };
-  
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -285,43 +341,8 @@ export function getDualColumnHTML(papers = [], dailyReport = null, visitorStats 
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-dark">
-        <div class="container-fluid">
-            <div class="d-flex justify-content-between align-items-center w-100">
-                <div class="d-flex align-items-center">
-                    <span class="navbar-brand mb-0 h1">
-                        <i class="fas fa-graduation-cap me-2"></i>PaperDog
-                    </span>
-                    <span class="navbar-text me-4">
-                        Daily AI Papers Digest
-                    </span>
-                </div>
-                <div class="d-flex align-items-center">
-                    <div class="visitor-info me-4 text-end">
-                        <div class="small text-light">
-                            <i class="fas fa-users me-1"></i>
-                            Today: ${visitorInfo.today} | Total: ${visitorInfo.total}
-                        </div>
-                        <div class="small text-light opacity-75">
-                            ${visitorInfo.displayText}
-                        </div>
-                    </div>
-                    <div class="nav-links">
-                        <a href="/archive" class="btn btn-outline-light btn-sm me-2">
-                            <i class="fas fa-archive me-1"></i>Archive
-                        </a>
-                        <a href="/about" class="btn btn-outline-light btn-sm me-2">
-                            <i class="fas fa-info-circle me-1"></i>About
-                        </a>
-                        <a href="#" class="btn btn-outline-light btn-sm" onclick="toggleTranslation()" id="translate-btn" title="切换语言 / Switch Language">
-                            <i class="fas fa-language me-1"></i><span id="translate-text">中文</span>
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </nav>
-    
+    ${getHeader('home', formattedStats, true)}
+
     <div class="container-fluid mt-3">
         <div class="row gx-4 gy-3">
             <div class="col-md-9">

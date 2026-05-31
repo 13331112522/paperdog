@@ -28,138 +28,197 @@ export function generateEnhancedArchiveHTML(data) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Paper Archive - PaperDog</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Serif+SC:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         :root {
-            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-            --border-radius: 12px;
+            /* Warm Ivory / Terracotta Palette */
+            --color-primary-50: #FBF0EA;
+            --color-primary-100: #F5DFD2;
+            --color-primary-200: #E8C4AD;
+            --color-primary-500: #C0552D;
+            --color-primary-600: #A84825;
+            --color-primary-700: #8B3A1D;
+
+            /* Warm Neutrals */
+            --color-gray-50: #FDF8F0;
+            --color-gray-100: #F5EDE2;
+            --color-gray-200: #E0D8CE;
+            --color-gray-300: #C9BFB3;
+            --color-gray-500: #7A7268;
+            --color-gray-700: #4A4A4A;
+            --color-gray-900: #2C2C2C;
+
+            --color-ink: #2C2C2C;
+            --color-body: #4A4A4A;
+
+            --font-heading: 'Noto Serif SC', Georgia, 'Times New Roman', serif;
+            --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-code: 'JetBrains Mono', Menlo, 'Courier New', monospace;
         }
 
         body {
-            background: #f8f9fa;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--color-gray-50);
+            font-family: var(--font-body);
+            color: var(--color-body);
+            line-height: 1.8;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-family: var(--font-heading);
+            color: var(--color-ink);
+            font-weight: 700;
         }
 
         .archive-header {
-            background: var(--primary-gradient);
-            color: white;
+            background: var(--color-primary-500);
+            color: #FFFFFF;
             padding: 3rem 0;
             margin-bottom: 2rem;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .archive-header h1 {
+            color: #FFFFFF;
         }
 
         .stats-card {
-            background: white;
-            border-radius: var(--border-radius);
+            background: #FFFFFF;
+            border-radius: 2px;
             padding: 1.5rem;
-            box-shadow: var(--card-shadow);
-            border: none;
-            transition: transform 0.2s ease;
+            border: 1px solid var(--color-gray-200);
+            transition: border-color 0.15s ease;
         }
 
         .stats-card:hover {
-            transform: translateY(-2px);
+            border-color: var(--color-primary-500);
+        }
+
+        .stats-number {
+            font-family: var(--font-heading);
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--color-primary-500);
         }
 
         .filter-section {
-            background: white;
-            border-radius: var(--border-radius);
+            background: #FFFFFF;
+            border-radius: 2px;
             padding: 1.5rem;
             margin-bottom: 2rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            border: 1px solid var(--color-gray-200);
         }
 
         .export-panel {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: var(--border-radius);
+            background: var(--color-primary-500);
+            color: #FFFFFF;
+            border-radius: 2px;
             padding: 1.5rem;
             margin-bottom: 2rem;
         }
 
         .export-btn {
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            color: white;
-            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #FFFFFF;
+            border-radius: 3px;
             padding: 0.5rem 1rem;
             margin: 0.25rem;
-            transition: all 0.3s ease;
+            transition: background 0.15s ease;
             text-decoration: none;
             display: inline-block;
         }
 
         .export-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-            border-color: rgba(255, 255, 255, 0.5);
-            color: white;
-            transform: translateY(-1px);
+            background: rgba(255, 255, 255, 0.25);
+            color: #FFFFFF;
         }
 
         .date-selector {
-            background: white;
-            border-radius: var(--border-radius);
+            background: #FFFFFF;
+            border-radius: 2px;
             padding: 1rem;
             margin-bottom: 2rem;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            border: 1px solid var(--color-gray-200);
         }
 
         .date-btn {
-            background: #f8f9fa;
-            border: 2px solid #e9ecef;
-            border-radius: 8px;
+            background: var(--color-gray-50);
+            border: 1px solid var(--color-gray-200);
+            border-radius: 3px;
             padding: 0.5rem 1rem;
             margin: 0.25rem;
-            transition: all 0.2s ease;
+            transition: all 0.15s ease;
             text-decoration: none;
-            color: #495057;
+            color: var(--color-gray-700);
             font-size: 0.9rem;
         }
 
         .date-btn:hover, .date-btn.active {
-            background: var(--primary-gradient);
-            border-color: transparent;
-            color: white;
-            transform: translateY(-1px);
+            background: var(--color-primary-500);
+            border-color: var(--color-primary-500);
+            color: #FFFFFF;
         }
 
         .paper-card {
-            background: white;
-            border-radius: var(--border-radius);
+            background: #FFFFFF;
+            border-radius: 2px;
             padding: 1.5rem;
             margin-bottom: 1rem;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            border: none;
-            transition: all 0.3s ease;
+            border: 1px solid var(--color-gray-200);
+            transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
         }
 
         .paper-card:hover {
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+            border-color: var(--color-primary-500);
             transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(192, 85, 45, 0.08);
+        }
+
+        .archive-card {
+            transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .archive-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(192, 85, 45, 0.08);
         }
 
         .score-badge {
-            background: var(--secondary-gradient);
-            color: white;
-            border-radius: 20px;
+            background: var(--color-primary-50);
+            color: var(--color-primary-700);
+            border-radius: 2px;
             padding: 0.25rem 0.75rem;
             font-size: 0.8rem;
             font-weight: 600;
+            border: 1px solid var(--color-primary-200);
         }
 
         .view-count {
-            background: rgba(0, 123, 255, 0.1);
-            color: #007bff;
-            border-radius: 12px;
+            background: var(--color-gray-50);
+            color: var(--color-gray-700);
+            border-radius: 2px;
             padding: 0.25rem 0.5rem;
             font-size: 0.8rem;
             font-weight: 500;
             display: flex;
             align-items: center;
             gap: 0.25rem;
-            border: 1px solid rgba(0, 123, 255, 0.2);
+            border: 1px solid var(--color-gray-200);
         }
 
         .view-count i {
@@ -167,24 +226,25 @@ export function generateEnhancedArchiveHTML(data) {
         }
 
         .category-badge {
-            background: #e3f2fd;
-            color: #1976d2;
-            border-radius: 15px;
+            background: var(--color-primary-50);
+            color: var(--color-primary-700);
+            border-radius: 2px;
             padding: 0.25rem 0.75rem;
             font-size: 0.8rem;
             font-weight: 500;
+            border: 1px solid var(--color-primary-200);
         }
 
         .search-box {
-            border-radius: 25px;
-            border: 2px solid #e9ecef;
+            border-radius: 3px;
+            border: 1px solid var(--color-gray-200);
             padding: 0.75rem 1.5rem;
-            transition: all 0.3s ease;
+            transition: border-color 0.15s ease;
         }
 
         .search-box:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+            border-color: var(--color-primary-500);
+            box-shadow: 0 0 0 2px rgba(192, 85, 45, 0.15);
         }
 
         .pagination {
@@ -192,21 +252,22 @@ export function generateEnhancedArchiveHTML(data) {
         }
 
         .page-link {
-            border-radius: 8px;
+            border-radius: 3px;
             margin: 0 0.25rem;
-            border: none;
-            background: #f8f9fa;
-            color: #495057;
+            border: 1px solid var(--color-gray-200);
+            background: #FFFFFF;
+            color: var(--color-gray-700);
         }
 
         .page-link:hover, .page-item.active .page-link {
-            background: var(--primary-gradient);
-            color: white;
+            background: var(--color-primary-500);
+            color: #FFFFFF;
+            border-color: var(--color-primary-500);
         }
 
         .export-format-info {
             background: rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
+            border-radius: 3px;
             padding: 1rem;
             margin-top: 1rem;
         }
@@ -217,10 +278,62 @@ export function generateEnhancedArchiveHTML(data) {
             padding: 2rem;
         }
 
-        .stats-number {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #667eea;
+        /* Dark mode */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --color-gray-50: #1c1a16;
+                --color-gray-100: #262320;
+                --color-gray-200: #3a3632;
+                --color-gray-300: #524e48;
+                --color-gray-500: #9a958e;
+                --color-gray-700: #c9c3ba;
+                --color-gray-900: #F5EDE2;
+
+                --color-primary-50: #2e1f18;
+                --color-primary-100: #3d2a20;
+                --color-primary-200: #5c3f30;
+                --color-primary-500: #D4764E;
+                --color-primary-600: #C0552D;
+                --color-primary-700: #A84825;
+
+                --color-ink: #F5EDE2;
+                --color-body: #c9c3ba;
+            }
+
+            body {
+                background: #1c1a16;
+                color: var(--color-body);
+            }
+
+            .archive-header {
+                background: #A84825;
+            }
+
+            .stats-card,
+            .filter-section,
+            .date-selector,
+            .paper-card,
+            .page-link {
+                background: #262320;
+                border-color: var(--color-gray-200);
+                color: var(--color-body);
+            }
+
+            .export-panel {
+                background: #8B3A1D;
+            }
+
+            .date-btn {
+                background: #262320;
+                border-color: var(--color-gray-200);
+                color: var(--color-body);
+            }
+
+            .search-box {
+                background: #262320;
+                border-color: var(--color-gray-200);
+                color: var(--color-body);
+            }
         }
     </style>
 </head>
@@ -236,7 +349,7 @@ export function generateEnhancedArchiveHTML(data) {
                     <p class="lead mb-0">Browse and export your curated research paper collection</p>
                 </div>
                 <div class="col-lg-4 text-end">
-                    <a href="/" class="btn btn-outline-light">
+                    <a href="/" class="btn" style="border:1px solid rgba(255,255,255,0.4);color:#fff;border-radius:3px;">
                         <i class="fas fa-home me-2"></i>Back to Home
                     </a>
                 </div>
@@ -301,9 +414,9 @@ export function generateEnhancedArchiveHTML(data) {
             </div>
             <div class="export-format-info">
                 <small>
-                    <strong>JSON:</strong> Complete data with analysis •
-                    <strong>CSV:</strong> Tabular data for analysis •
-                    <strong>Markdown:</strong> Human-readable reports •
+                    <strong>JSON:</strong> Complete data with analysis |
+                    <strong>CSV:</strong> Tabular data for analysis |
+                    <strong>Markdown:</strong> Human-readable reports |
                     <strong>BibTeX:</strong> Academic citations
                 </small>
             </div>
@@ -335,21 +448,22 @@ export function generateEnhancedArchiveHTML(data) {
                     <form method="GET" action="/archive" class="d-flex gap-2">
                         ${selectedDate ? `<input type="hidden" name="date" value="${selectedDate}">` : ''}
                         <input type="text" name="search" class="form-control search-box" placeholder="Search papers..." value="${search || ''}">
-                        <button type="submit" class="btn btn-primary">
+                        <button type="submit" class="btn" style="background:var(--color-primary-500);color:#fff;border:none;border-radius:3px;">
                             <i class="fas fa-search"></i>
                         </button>
-                        ${search ? `<a href="?${selectedDate ? `date=${selectedDate}` : ''}" class="btn btn-outline-secondary">Clear</a>` : ''}
+                        ${search ? `<a href="?${selectedDate ? `date=${selectedDate}` : ''}" class="btn btn-outline-secondary" style="border-radius:3px;">Clear</a>` : ''}
                     </form>
                 </div>
                 <div class="col-lg-6 text-end">
                     <div class="btn-group" role="group">
-                        <a href="?${new URLSearchParams({...filters, date: selectedDate}).toString()}" class="btn btn-outline-primary ${!category ? 'active' : ''}">
+                        <a href="?${new URLSearchParams({...filters, date: selectedDate}).toString()}" class="btn btn-outline-secondary ${!category ? 'active' : ''}" style="border-radius:3px;">
                             All Categories
                         </a>
                         ${statistics ? Object.keys(statistics.category_distribution || {}).slice(0, 5).map(cat => `
                             <a href="?${new URLSearchParams({...filters, date: selectedDate, category: cat}).toString()}"
-                               class="btn btn-outline-primary ${category === cat ? 'active' : ''}"
-                               title="${cat.replace(/_/g, ' ')}">
+                               class="btn btn-outline-secondary ${category === cat ? 'active' : ''}"
+                               title="${cat.replace(/_/g, ' ')}"
+                               style="border-radius:3px;">
                                 ${cat.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                             </a>
                         `).join('') : ''}
@@ -376,13 +490,15 @@ export function generateEnhancedArchiveHTML(data) {
                     <h5 class="text-muted">No papers found</h5>
                     <p class="text-muted">Try adjusting your search criteria or browse a different date.</p>
                 </div>
-            ` : papers.map(paper => `
-                <div class="paper-card">
+            ` : papers.map(paper => {
+                const paperDataJson = JSON.stringify(paper).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                return `
+                <div class="paper-card" data-paper-id="${paper.id}">
                     <div class="row">
                         <div class="col-md-10">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <h5 class="mb-1">
-                                    <a href="${paper.url || '#'}" target="_blank" class="text-decoration-none">
+                                    <a href="${paper.url || '#'}" target="_blank" class="text-decoration-none" style="color:var(--color-ink);">
                                         ${paper.title}
                                     </a>
                                 </h5>
@@ -409,17 +525,18 @@ export function generateEnhancedArchiveHTML(data) {
                         </div>
                         <div class="col-md-2 text-end">
                             ${paper.url ? `
-                                <a href="${paper.url}" target="_blank" class="btn btn-sm btn-outline-primary mb-2">
+                                <a href="${paper.url}" target="_blank" class="btn btn-sm btn-outline-secondary mb-2" style="border-radius:3px;">
                                     <i class="fas fa-external-link-alt me-1"></i>View Paper
                                 </a>
                             ` : ''}
-                            <button class="btn btn-sm btn-outline-secondary" onclick="exportPaper('${paper.id}', '${sanitizeFilename(paper.title)}')">
+                            <button class="btn btn-sm btn-outline-secondary" style="border-radius:3px;" onclick="exportPaper(this)" data-paper='${paperDataJson}'>
                                 <i class="fas fa-download me-1"></i>Export
                             </button>
                         </div>
                     </div>
                 </div>
-            `).join('')}
+            `;
+            }).join('')}
         </div>
 
         <!-- Pagination -->
@@ -449,43 +566,124 @@ export function generateEnhancedArchiveHTML(data) {
 
     <!-- Loading Spinner -->
     <div class="loading-spinner" id="loadingSpinner">
-        <div class="spinner-border text-primary" role="status">
+        <div class="spinner-border" style="color:var(--color-primary-500);" role="status">
             <span class="visually-hidden">Loading...</span>
         </div>
         <p class="mt-2">Preparing your export...</p>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Export individual paper
-        async function exportPaper(paperId, paperTitle) {
-            const spinner = document.getElementById('loadingSpinner');
-            spinner.style.display = 'block';
+        // Sanitize a string for use as a filename
+        function sanitizeFilename(name) {
+            return name.replace(/[^a-zA-Z0-9_\\- ]/g, '').replace(/\\s+/g, '_').substring(0, 80);
+        }
 
+        // Format a single author name for BibTeX (Last, First)
+        function formatBibtexAuthor(name) {
+            const parts = name.trim().split(/\\s+/);
+            if (parts.length === 1) return parts[0];
+            return parts.slice(-1) + ', ' + parts.slice(0, -1).join(' ');
+        }
+
+        // Generate BibTeX export
+        function generateBibtex(paper) {
+            const id = paper.id || 'unknown';
+            const title = paper.title || 'Untitled';
+            const authors = (paper.authors || []).map(formatBibtexAuthor).join(' and ');
+            const year = paper.published ? new Date(paper.published).getFullYear() : new Date().getFullYear();
+            const abstract = (paper.abstract || '').replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();
+            const keywords = (paper.analysis?.keywords || []).join(', ');
+            const category = (paper.analysis?.category || 'other').replace(/_/g, ' ');
+
+            let bibtex = '@article{' + sanitizeFilename(id) + ',\\n';
+            bibtex += '  title     = {' + title + '},\\n';
+            bibtex += '  author    = {' + authors + '},\\n';
+            bibtex += '  year      = {' + year + '},\\n';
+            if (paper.url) bibtex += '  url       = {' + paper.url + '},\\n';
+            if (abstract) bibtex += '  abstract  = {' + abstract + '},\\n';
+            if (keywords) bibtex += '  keywords  = {' + keywords + '},\\n';
+            bibtex += '  category  = {' + category + '}\\n';
+            bibtex += '}\\n';
+            return bibtex;
+        }
+
+        // Generate Markdown export
+        function generateMarkdown(paper) {
+            const title = paper.title || 'Untitled';
+            const authors = (paper.authors || []).join(', ') || 'Unknown authors';
+            const published = paper.published ? new Date(paper.published).toLocaleDateString() : 'N/A';
+            const abstract = paper.abstract || 'No abstract available';
+            const keywords = (paper.analysis?.keywords || []).join(', ');
+            const category = (paper.analysis?.category || 'other').replace(/_/g, ' ');
+            const score = (paper.analysis?.relevance_score || 5).toFixed(1);
+            const url = paper.url || '';
+
+            let md = '# ' + title + '\\n\\n';
+            md += '**Authors:** ' + authors + '\\n\\n';
+            md += '**Published:** ' + published + '  \\n';
+            md += '**Category:** ' + category + '  \\n';
+            md += '**Relevance Score:** ' + score + '/10  \\n';
+            if (url) md += '**Paper URL:** [' + url + '](' + url + ')  \\n';
+            md += '\\n---\\n\\n';
+            md += '## Abstract\\n\\n' + abstract + '\\n\\n';
+            if (keywords) md += '## Keywords\\n\\n' + keywords + '\\n\\n';
+            md += '---\\n*Exported from PaperDog on ' + new Date().toISOString() + '*\\n';
+            return md;
+        }
+
+        // Export individual paper using embedded data
+        function exportPaper(button) {
             try {
-                // For now, we'll export as JSON - could be enhanced to support multiple formats
-                const response = await fetch(\`/api/papers/\${paperId}\`);
-                const data = await response.json();
+                var rawJson = button.getAttribute('data-paper');
+                if (!rawJson) {
+                    alert('Export failed: Paper data not found. Please refresh the page and try again.');
+                    return;
+                }
+                var paper = JSON.parse(rawJson);
+                var title = sanitizeFilename(paper.title || 'paper');
+                var timestamp = new Date().toISOString().slice(0, 10);
 
-                const exportData = {
-                    paper: data,
-                    exported_at: new Date().toISOString(),
-                    format: 'individual_export'
-                };
+                // Prompt user for format choice
+                var format = prompt('Choose export format:\\n  1 - JSON\\n  2 - BibTeX\\n  3 - Markdown\\nEnter 1, 2, or 3:', '1');
+                if (!format) return;
 
-                downloadFile(JSON.stringify(exportData, null, 2), \`\${paperTitle}_export.json\`, 'application/json');
+                var content, filename, contentType;
+                switch (format.trim()) {
+                    case '2':
+                        content = generateBibtex(paper);
+                        filename = title + '_' + timestamp + '.bib';
+                        contentType = 'text/plain';
+                        break;
+                    case '3':
+                        content = generateMarkdown(paper);
+                        filename = title + '_' + timestamp + '.md';
+                        contentType = 'text/markdown';
+                        break;
+                    case '1':
+                    default:
+                        var exportData = {
+                            paper: paper,
+                            exported_at: new Date().toISOString(),
+                            source: 'PaperDog Archive'
+                        };
+                        content = JSON.stringify(exportData, null, 2);
+                        filename = title + '_' + timestamp + '.json';
+                        contentType = 'application/json';
+                        break;
+                }
+
+                downloadFile(content, filename, contentType);
             } catch (error) {
-                alert('Export failed: ' + error.message);
-            } finally {
-                spinner.style.display = 'none';
+                alert('Export failed: ' + error.message + '. Please try again.');
             }
         }
 
         // Download file helper
         function downloadFile(content, filename, contentType) {
-            const blob = new Blob([content], { type: contentType });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
+            var blob = new Blob([content], { type: contentType });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
             a.href = url;
             a.download = filename;
             document.body.appendChild(a);
@@ -494,16 +692,20 @@ export function generateEnhancedArchiveHTML(data) {
             URL.revokeObjectURL(url);
         }
 
-        // Show export progress for large downloads
-        document.querySelectorAll('a[href*="/api/archive/export"]').forEach(link => {
+        // Show export progress for bulk downloads with error handling
+        document.querySelectorAll('a[href*="/api/archive/export"]').forEach(function(link) {
             link.addEventListener('click', function(e) {
-                const spinner = document.getElementById('loadingSpinner');
-                spinner.style.display = 'block';
+                try {
+                    var spinner = document.getElementById('loadingSpinner');
+                    if (spinner) spinner.style.display = 'block';
 
-                // Hide spinner after a delay (export will proceed in background)
-                setTimeout(() => {
-                    spinner.style.display = 'none';
-                }, 3000);
+                    // Hide spinner after a delay (export will proceed in background)
+                    setTimeout(function() {
+                        if (spinner) spinner.style.display = 'none';
+                    }, 5000);
+                } catch (err) {
+                    console.error('Export progress display error:', err);
+                }
             });
         });
     </script>
@@ -518,8 +720,8 @@ export function generateExportModal(data) {
   return `
 <div class="modal fade" id="exportModal" tabindex="-1" aria-labelledby="exportModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
+    <div class="modal-content" style="border-radius:2px;border:1px solid var(--color-gray-200);">
+      <div class="modal-header" style="border-bottom:1px solid var(--color-gray-200);">
         <h5 class="modal-title" id="exportModalLabel">
           <i class="fas fa-download me-2"></i>Export Archive Data
         </h5>
@@ -571,9 +773,9 @@ export function generateExportModal(data) {
           </div>
         </div>
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="performAdvancedExport()">
+      <div class="modal-footer" style="border-top:1px solid var(--color-gray-200);">
+        <button type="button" class="btn btn-secondary" style="border-radius:3px;" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn" style="background:var(--color-primary-500);color:#fff;border:none;border-radius:3px;" onclick="performAdvancedExport()">
           <i class="fas fa-download me-2"></i>Export Data
         </button>
       </div>
@@ -588,13 +790,14 @@ export function generateExportProgressTemplate() {
 <div class="progress mb-3" style="height: 25px">
   <div class="progress-bar progress-bar-striped progress-bar-animated"
        role="progressbar"
-       id="exportProgressBar">
+       id="exportProgressBar"
+       style="background:var(--color-primary-500);">
     Preparing export...
   </div>
 </div>
 <div class="text-center">
   <p id="exportStatusText">Initializing export process... </p>
-  <div class="spinner-border text-primary" role="status">
+  <div class="spinner-border" style="color:var(--color-primary-500);" role="status">
     <span class="visually-hidden">Loading...</span>
   </div>
 </div>`;
@@ -605,7 +808,7 @@ export function generateExportCompleteTemplate(result) {
   const { format, filename, size, papers_count, metadata } = result;
 
   return `
-<div class="alert alert-success" role="alert">
+<div class="alert alert-success" role="alert" style="border-radius:2px;">
   <h6 class="alert-heading">Export Complete! <i class="fas fa-check-circle"></i></h6>
   <p>Your archive data has been successfully exported.</p>
   <hr>
@@ -617,10 +820,10 @@ export function generateExportCompleteTemplate(result) {
   </ul>
 </div>
 <div class="text-center mt-3">
-  <a href="#" class="btn btn-success" onclick="downloadExportedFile()">
+  <a href="#" class="btn" style="background:var(--color-primary-500);color:#fff;border:none;border-radius:3px;" onclick="downloadExportedFile()">
     <i class="fas fa-download me-2"></i>Download File
   </a>
-  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+  <button type="button" class="btn btn-secondary" style="border-radius:3px;" data-bs-dismiss="modal">Close</button>
 </div>`;
 }
 
@@ -642,8 +845,8 @@ export function generateCategoryChart(categories) {
           <span class="small">${category.replace(/_/g, ' ')}</span>
           <span class="small text-muted">${count} (${percentage}%)</span>
         </div>
-        <div class="progress" style="height: 8px">
-          <div class="progress-bar bg-primary" style="width: ${percentage}%"></div>
+        <div class="progress" style="height: 6px">
+          <div class="progress-bar" style="width: ${percentage}%;background:var(--color-primary-500);"></div>
         </div>
       </div>
     `;
@@ -657,11 +860,11 @@ export function generateDateRangePicker() {
 <div class="row mb-3">
   <div class="col-md-6">
     <label for="startDate" class="form-label">Start Date</label>
-    <input type="date" class="form-control" id="startDate" name="start_date">
+    <input type="date" class="form-control" style="border-radius:3px;" id="startDate" name="start_date">
   </div>
   <div class="col-md-6">
     <label for="endDate" class="form-label">End Date</label>
-    <input type="date" class="form-control" id="endDate" name="end_date">
+    <input type="date" class="form-control" style="border-radius:3px;" id="endDate" name="end_date">
   </div>
 </div>`;
 }
@@ -672,7 +875,7 @@ export function generateAdvancedFilters() {
 <div class="row mb-3">
   <div class="col-md-4">
     <label for="categoryFilter" class="form-label">Category</label>
-    <select class="form-select" id="categoryFilter" name="category">
+    <select class="form-select" style="border-radius:3px;" id="categoryFilter" name="category">
       <option value="">All Categories</option>
       <option value="computer_vision">Computer Vision</option>
       <option value="machine_learning">Machine Learning</option>
@@ -707,25 +910,25 @@ export function generateExportSummary(data) {
   <div class="row">
     <div class="col-md-3">
       <div class="text-center">
-        <div class="h4 text-primary">${papers_count}</div>
+        <div class="h4" style="color:var(--color-primary-500);">${papers_count}</div>
         <small class="text-muted">Papers</small>
       </div>
     </div>
     <div class="col-md-3">
       <div class="text-center">
-        <div class="h4 text-primary">${format.toUpperCase()}</div>
+        <div class="h4" style="color:var(--color-primary-500);">${format.toUpperCase()}</div>
         <small class="text-muted">Format</small>
       </div>
     </div>
     <div class="col-md-3">
       <div class="text-center">
-        <div class="h4 text-primary">${date_range ? `${date_range.start} to ${date_range.end}` : 'All'}</div>
+        <div class="h4" style="color:var(--color-primary-500);">${date_range ? `${date_range.start} to ${date_range.end}` : 'All'}</div>
         <small class="text-muted">Date Range</small>
       </div>
     </div>
     <div class="col-md-3">
       <div class="text-center">
-        <div class="h4 text-primary">${filters?.category || 'All'}</div>
+        <div class="h4" style="color:var(--color-primary-500);">${filters?.category || 'All'}</div>
         <small class="text-muted">Category</small>
       </div>
     </div>

@@ -105,21 +105,25 @@ export function extractKeywords(text, maxKeywords = 8) {
     .map(([word]) => word);
 }
 
-export function jsonResponse(data, status = 200) {
+export function jsonResponse(data, status = 200, maxAge = 60) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       'Content-Type': 'application/json',
+      'Cache-Control': maxAge >= 0 ? `public, max-age=${maxAge}, s-maxage=${Math.max(maxAge, 120)}` : 'no-store',
+      'Vary': 'Accept-Encoding',
       ...corsHeaders
     }
   });
 }
 
-export function htmlResponse(html, status = 200) {
+export function htmlResponse(html, status = 200, maxAge = 300) {
   return new Response(html, {
     status,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': maxAge >= 0 ? `public, max-age=${maxAge}, s-maxage=${maxAge}, stale-while-revalidate=${maxAge * 2}` : 'no-store',
+      'Vary': 'Accept-Encoding',
       ...corsHeaders
     }
   });
@@ -130,13 +134,15 @@ export function rssResponse(xml, status = 200) {
     status,
     headers: {
       'Content-Type': 'application/rss+xml; charset=utf-8',
+      'Cache-Control': 'public, max-age=300, s-maxage=600',
+      'Vary': 'Accept-Encoding',
       ...corsHeaders
     }
   });
 }
 
 export function errorResponse(message, status = 500) {
-  return jsonResponse({ error: message }, status);
+  return jsonResponse({ error: message }, status, -1);
 }
 
 export async function getCachedPapers(date, env) {

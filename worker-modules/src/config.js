@@ -27,6 +27,7 @@ export const routes = {
   'GET /about': 'handleAbout',
   'GET /blog': 'handleBlog',
   'GET /blog/:slug': 'handleBlogPost',
+  'GET /api/blog/image/:slug': 'handleBlogImage',
   'GET /api/scoring/:date': 'handleScoringReport',
   // Archive routes
   'GET /api/archive/dates': 'handleArchiveDates',

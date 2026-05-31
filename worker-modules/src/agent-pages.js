@@ -52,49 +52,177 @@ export function getForAIAgentsHTML(origin) {
     <meta name="authentication" content="none">
     <meta name="rate-limit" content="100-requests-per-hour">
 
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
+        :root {
+            --color-primary-50: #FBF0EA;
+            --color-primary-100: #F5DFD2;
+            --color-primary-200: #E8C4AD;
+            --color-primary-500: #C0552D;
+            --color-primary-600: #A84825;
+            --color-primary-700: #8B3A1D;
+
+            --color-gray-50: #FDF8F0;
+            --color-gray-100: #F5EDE2;
+            --color-gray-200: #E0D8CE;
+            --color-gray-300: #C9BFB3;
+            --color-gray-500: #7A7268;
+            --color-gray-700: #4A4A4A;
+            --color-gray-900: #2C2C2C;
+
+            --color-ink: #2C2C2C;
+            --color-body: #4A4A4A;
+
+            --font-heading: 'Noto Serif SC', Georgia, 'Times New Roman', serif;
+            --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-code: 'JetBrains Mono', Menlo, 'Courier New', monospace;
+        }
+
+        body {
+            background: var(--color-gray-50);
+            font-family: var(--font-body);
+            color: var(--color-body);
+            line-height: 1.8;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-family: var(--font-heading);
+            color: var(--color-ink);
+            font-weight: 700;
+        }
+
         .hero-section {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            background: var(--color-primary-500);
+            color: #FFFFFF;
             padding: 4rem 0;
         }
+
+        .hero-section h1 {
+            color: #FFFFFF;
+        }
+
         .capability-card {
-            border: none;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            transition: transform 0.2s;
+            border: 1px solid var(--color-gray-200);
+            border-radius: 2px;
+            transition: border-color 0.15s ease;
             height: 100%;
+            background: #FFFFFF;
         }
+
         .capability-card:hover {
-            transform: translateY(-5px);
+            border-color: var(--color-primary-500);
         }
+
         .code-block {
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
-            border-radius: 0.5rem;
+            background: var(--color-gray-100);
+            border: 1px solid var(--color-gray-200);
+            border-radius: 2px;
             padding: 1rem;
-            font-family: 'Courier New', monospace;
+            font-family: var(--font-code);
             font-size: 0.9rem;
         }
+
         .mcp-tools-list {
             list-style: none;
             padding: 0;
         }
+
         .mcp-tools-list li {
-            background: #f8f9fa;
+            background: var(--color-gray-50);
             margin: 0.5rem 0;
             padding: 0.75rem;
-            border-left: 4px solid #007bff;
-            border-radius: 0.25rem;
+            border-left: 3px solid var(--color-primary-500);
+            border-radius: 0 2px 2px 0;
+        }
+
+        .nav-bg {
+            background: var(--color-gray-900);
+        }
+
+        .nav-bg .navbar-brand,
+        .nav-bg .nav-link {
+            color: var(--color-gray-100);
+        }
+
+        .nav-bg .nav-link.active {
+            color: var(--color-primary-200);
+        }
+
+        .footer-bg {
+            background: var(--color-gray-900);
+            color: var(--color-gray-500);
+        }
+
+        .footer-bg a {
+            color: var(--color-gray-500);
+        }
+
+        .feature-icon {
+            color: var(--color-primary-500);
+        }
+
+        /* Dark mode */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --color-gray-50: #1c1a16;
+                --color-gray-100: #262320;
+                --color-gray-200: #3a3632;
+                --color-gray-300: #524e48;
+                --color-gray-500: #9a958e;
+                --color-gray-700: #c9c3ba;
+                --color-gray-900: #F5EDE2;
+
+                --color-primary-500: #D4764E;
+                --color-primary-600: #C0552D;
+
+                --color-ink: #F5EDE2;
+                --color-body: #c9c3ba;
+            }
+
+            body {
+                background: #1c1a16;
+            }
+
+            .hero-section {
+                background: #8B3A1D;
+            }
+
+            .capability-card {
+                background: #262320;
+                border-color: var(--color-gray-200);
+            }
+
+            .code-block {
+                background: var(--color-gray-100);
+                border-color: var(--color-gray-200);
+                color: var(--color-body);
+            }
+
+            .mcp-tools-list li {
+                background: var(--color-gray-100);
+                color: var(--color-body);
+            }
+
+            .nav-bg {
+                background: #1c1a16;
+            }
+
+            .footer-bg {
+                background: #1c1a16;
+            }
         }
     </style>
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <nav class="navbar navbar-expand-lg nav-bg py-2">
         <div class="container">
-            <a class="navbar-brand" href="${origin}">
+            <a class="navbar-brand fw-bold" href="${origin}">
                 <i class="fas fa-dog me-2"></i>PaperDog
             </a>
             <div class="navbar-nav ms-auto">
@@ -118,13 +246,13 @@ export function getForAIAgentsHTML(origin) {
             <div class="row justify-content-center">
                 <div class="col-md-8">
                     <div class="d-flex justify-content-center gap-3">
-                        <span class="badge bg-success fs-6">
+                        <span class="badge" style="background:rgba(255,255,255,0.2);color:#fff;font-size:0.95rem;padding:0.5rem 1rem;">
                             <i class="fas fa-check-circle me-1"></i>No Authentication
                         </span>
-                        <span class="badge bg-info fs-6">
+                        <span class="badge" style="background:rgba(255,255,255,0.2);color:#fff;font-size:0.95rem;padding:0.5rem 1rem;">
                             <i class="fas fa-bolt me-1"></i>Rate Limited
                         </span>
-                        <span class="badge bg-warning fs-6">
+                        <span class="badge" style="background:rgba(255,255,255,0.2);color:#fff;font-size:0.95rem;padding:0.5rem 1rem;">
                             <i class="fas fa-gift me-1"></i>Free Service
                         </span>
                     </div>
@@ -138,13 +266,13 @@ export function getForAIAgentsHTML(origin) {
         <div class="container">
             <div class="row">
                 <div class="col-lg-8 mx-auto">
-                    <div class="card border-primary">
-                        <div class="card-header bg-primary text-white">
+                    <div class="card" style="border:1px solid var(--color-primary-200);border-radius:2px;">
+                        <div class="card-header" style="background:var(--color-primary-500);color:#fff;border-radius:0;">
                             <h4 class="mb-0">
                                 <i class="fas fa-rocket me-2"></i>Quick Start for AI Agents
                             </h4>
                         </div>
-                        <div class="card-body">
+                        <div class="card-body" style="background:#FFFFFF;">
                             <p class="card-text">
                                 PaperDog provides MCP tools for AI research paper discovery. Here's how to integrate:
                             </p>
@@ -171,14 +299,14 @@ export function getForAIAgentsHTML(origin) {
     </section>
 
     <!-- Capabilities -->
-    <section class="py-5 bg-light">
+    <section class="py-5" style="background:var(--color-gray-100);">
         <div class="container">
             <h2 class="text-center mb-5">AI Agent Capabilities</h2>
             <div class="row g-4">
                 <div class="col-md-6 col-lg-4">
                     <div class="card capability-card">
                         <div class="card-body text-center">
-                            <i class="fas fa-search fa-3x text-primary mb-3"></i>
+                            <i class="fas fa-search fa-3x feature-icon mb-3"></i>
                             <h5 class="card-title">Smart Search</h5>
                             <p class="card-text">
                                 Search across thousands of papers with advanced filtering by category, relevance score, and date ranges.
@@ -189,7 +317,7 @@ export function getForAIAgentsHTML(origin) {
                 <div class="col-md-6 col-lg-4">
                     <div class="card capability-card">
                         <div class="card-body text-center">
-                            <i class="fas fa-brain fa-3x text-success mb-3"></i>
+                            <i class="fas fa-brain fa-3x feature-icon mb-3"></i>
                             <h5 class="card-title">AI Analysis</h5>
                             <p class="card-text">
                                 Get AI-powered analysis including challenges, innovations, experiments, and insights for each paper.
@@ -200,7 +328,7 @@ export function getForAIAgentsHTML(origin) {
                 <div class="col-md-6 col-lg-4">
                     <div class="card capability-card">
                         <div class="card-body text-center">
-                            <i class="fas fa-calendar fa-3x text-info mb-3"></i>
+                            <i class="fas fa-calendar fa-3x feature-icon mb-3"></i>
                             <h5 class="card-title">Daily Curation</h5>
                             <p class="card-text">
                                 Access daily curated top papers with comprehensive analysis and relevance scoring.
@@ -211,7 +339,7 @@ export function getForAIAgentsHTML(origin) {
                 <div class="col-md-6 col-lg-4">
                     <div class="card capability-card">
                         <div class="card-body text-center">
-                            <i class="fas fa-archive fa-3x text-warning mb-3"></i>
+                            <i class="fas fa-archive fa-3x feature-icon mb-3"></i>
                             <h5 class="card-title">Historical Archive</h5>
                             <p class="card-text">
                                 Query historical paper archives with advanced search and filtering capabilities.
@@ -222,7 +350,7 @@ export function getForAIAgentsHTML(origin) {
                 <div class="col-md-6 col-lg-4">
                     <div class="card capability-card">
                         <div class="card-body text-center">
-                            <i class="fas fa-layer-group fa-3x text-danger mb-3"></i>
+                            <i class="fas fa-layer-group fa-3x feature-icon mb-3"></i>
                             <h5 class="card-title">Categories</h5>
                             <p class="card-text">
                                 Browse papers by research categories including computer vision, NLP, ML, and more.
@@ -233,7 +361,7 @@ export function getForAIAgentsHTML(origin) {
                 <div class="col-md-6 col-lg-4">
                     <div class="card capability-card">
                         <div class="card-body text-center">
-                            <i class="fas fa-tachometer-alt fa-3x text-secondary mb-3"></i>
+                            <i class="fas fa-tachometer-alt fa-3x feature-icon mb-3"></i>
                             <h5 class="card-title">Rate Limited</h5>
                             <p class="card-text">
                                 Fair usage with 100 requests per hour and 1000 requests per day per IP address.
@@ -253,13 +381,13 @@ export function getForAIAgentsHTML(origin) {
             <!-- Claude Integration -->
             <div class="row mb-4">
                 <div class="col-lg-8 mx-auto">
-                    <div class="card">
-                        <div class="card-header">
+                    <div class="card" style="border:1px solid var(--color-gray-200);border-radius:2px;">
+                        <div class="card-header" style="background:var(--color-gray-50);border-bottom:1px solid var(--color-gray-200);">
                             <h5 class="mb-0">
                                 <i class="fas fa-comment-dots me-2"></i>Claude Integration
                             </h5>
                         </div>
-                        <div class="card-body">
+                        <div class="card-body" style="background:#FFFFFF;">
                             <p>Add PaperDog MCP to Claude's configuration:</p>
                             <div class="code-block">
 {
@@ -285,13 +413,13 @@ export function getForAIAgentsHTML(origin) {
             <!-- ChatGPT Integration -->
             <div class="row">
                 <div class="col-lg-8 mx-auto">
-                    <div class="card">
-                        <div class="card-header">
+                    <div class="card" style="border:1px solid var(--color-gray-200);border-radius:2px;">
+                        <div class="card-header" style="background:var(--color-gray-50);border-bottom:1px solid var(--color-gray-200);">
                             <h5 class="mb-0">
                                 <i class="fas fa-robot me-2"></i>ChatGPT Plugin
                             </h5>
                         </div>
-                        <div class="card-body">
+                        <div class="card-body" style="background:#FFFFFF;">
                             <p>Create a custom ChatGPT plugin that calls PaperDog's MCP endpoint:</p>
                             <div class="code-block">
 POST ${origin}/mcp
@@ -318,16 +446,16 @@ Content-Type: application/json
     </section>
 
     <!-- Technical Details -->
-    <section class="py-5 bg-light">
+    <section class="py-5" style="background:var(--color-gray-100);">
         <div class="container">
             <h2 class="text-center mb-5">Technical Details</h2>
             <div class="row">
                 <div class="col-lg-8 mx-auto">
-                    <div class="card">
-                        <div class="card-header">
+                    <div class="card" style="border:1px solid var(--color-gray-200);border-radius:2px;">
+                        <div class="card-header" style="background:var(--color-gray-50);border-bottom:1px solid var(--color-gray-200);">
                             <h5 class="mb-0">Protocol & Specifications</h5>
                         </div>
-                        <div class="card-body">
+                        <div class="card-body" style="background:#FFFFFF;">
                             <div class="row">
                                 <div class="col-md-6">
                                     <h6>Protocol</h6>
@@ -362,20 +490,20 @@ Content-Type: application/json
     </section>
 
     <!-- Footer -->
-    <footer class="bg-dark text-light py-4">
+    <footer class="footer-bg py-4">
         <div class="container text-center">
             <p class="mb-0">
-                © 2024 PaperDog. Empowering AI agents with research knowledge.
+                &copy; 2024 PaperDog. Empowering AI agents with research knowledge.
             </p>
             <div class="mt-2">
-                <a href="${origin}" class="text-light me-3">Home</a>
-                <a href="${origin}/api/docs" class="text-light me-3">API Docs</a>
-                <a href="${origin}/about" class="text-light">About</a>
+                <a href="${origin}" class="me-3">Home</a>
+                <a href="${origin}/api/docs" class="me-3">API Docs</a>
+                <a href="${origin}/about">About</a>
             </div>
         </div>
     </footer>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>`;
 }
@@ -392,58 +520,178 @@ export function getAPIDocsHTML(origin) {
     <title>PaperDog API Documentation - REST & MCP Endpoints</title>
     <meta name="description" content="Complete API documentation for PaperDog research paper discovery service">
 
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" rel="stylesheet">
     <style>
+        :root {
+            --color-primary-50: #FBF0EA;
+            --color-primary-100: #F5DFD2;
+            --color-primary-200: #E8C4AD;
+            --color-primary-500: #C0552D;
+            --color-primary-600: #A84825;
+            --color-primary-700: #8B3A1D;
+
+            --color-gray-50: #FDF8F0;
+            --color-gray-100: #F5EDE2;
+            --color-gray-200: #E0D8CE;
+            --color-gray-300: #C9BFB3;
+            --color-gray-500: #7A7268;
+            --color-gray-700: #4A4A4A;
+            --color-gray-900: #2C2C2C;
+
+            --color-ink: #2C2C2C;
+            --color-body: #4A4A4A;
+
+            --font-heading: 'Noto Serif SC', Georgia, 'Times New Roman', serif;
+            --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-code: 'JetBrains Mono', Menlo, 'Courier New', monospace;
+        }
+
+        body {
+            background: var(--color-gray-50);
+            font-family: var(--font-body);
+            color: var(--color-body);
+            line-height: 1.8;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-family: var(--font-heading);
+            color: var(--color-ink);
+            font-weight: 700;
+        }
+
+        .nav-bg {
+            background: var(--color-gray-900);
+        }
+
+        .nav-bg .navbar-brand,
+        .nav-bg .nav-link {
+            color: var(--color-gray-100);
+        }
+
+        .nav-bg .nav-link.active {
+            color: var(--color-primary-200);
+        }
+
         .sidebar {
-            background: #f8f9fa;
-            border-right: 1px solid #dee2e6;
+            background: #FFFFFF;
+            border-right: 1px solid var(--color-gray-200);
             min-height: calc(100vh - 56px);
         }
+
         .nav-pills .nav-link {
-            color: #495057;
+            color: var(--color-gray-700);
             border-radius: 0;
             padding: 0.75rem 1rem;
         }
+
         .nav-pills .nav-link.active {
-            background: #007bff;
+            background: var(--color-primary-500);
+            color: #FFFFFF;
         }
+
         .endpoint-card {
-            border-left: 4px solid #007bff;
+            border-left: 3px solid var(--color-primary-500);
             margin-bottom: 1rem;
+            border-radius: 2px;
+            border-top: 1px solid var(--color-gray-200);
+            border-right: 1px solid var(--color-gray-200);
+            border-bottom: 1px solid var(--color-gray-200);
         }
+
         .method-badge {
             font-size: 0.8rem;
             font-weight: bold;
             padding: 0.25rem 0.5rem;
+            border-radius: 2px;
         }
-        .method-get { background: #28a745; color: white; }
-        .method-post { background: #007bff; color: white; }
+
+        .method-get { background: var(--color-primary-500); color: white; }
+        .method-post { background: var(--color-gray-700); color: white; }
+
         .code-block {
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
-            border-radius: 0.25rem;
+            background: var(--color-gray-100);
+            border: 1px solid var(--color-gray-200);
+            border-radius: 2px;
             padding: 1rem;
-            font-family: 'Courier New', monospace;
+            font-family: var(--font-code);
             font-size: 0.9rem;
             overflow-x: auto;
         }
+
         .response-example {
-            background: #f8f9fa;
-            border-left: 4px solid #28a745;
+            background: var(--color-gray-100);
+            border-left: 3px solid var(--color-primary-500);
         }
+
         .error-example {
-            background: #f8f9fa;
-            border-left: 4px solid #dc3545;
+            background: var(--color-gray-100);
+            border-left: 3px solid #B91C1C;
+        }
+
+        /* Dark mode */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --color-gray-50: #1c1a16;
+                --color-gray-100: #262320;
+                --color-gray-200: #3a3632;
+                --color-gray-300: #524e48;
+                --color-gray-500: #9a958e;
+                --color-gray-700: #c9c3ba;
+                --color-gray-900: #F5EDE2;
+
+                --color-primary-500: #D4764E;
+
+                --color-ink: #F5EDE2;
+                --color-body: #c9c3ba;
+            }
+
+            body {
+                background: #1c1a16;
+            }
+
+            .nav-bg {
+                background: #1c1a16;
+            }
+
+            .sidebar {
+                background: #262320;
+                border-right-color: var(--color-gray-200);
+            }
+
+            .endpoint-card {
+                background: #262320;
+                border-color: var(--color-gray-200);
+                border-left-color: var(--color-primary-500);
+            }
+
+            .code-block {
+                background: var(--color-gray-100);
+                border-color: var(--color-gray-200);
+                color: var(--color-body);
+            }
+
+            .card {
+                background: #262320;
+                border-color: var(--color-gray-200);
+            }
+
+            .card-header {
+                background: var(--color-gray-100);
+                border-color: var(--color-gray-200);
+            }
         }
     </style>
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <nav class="navbar navbar-expand-lg nav-bg py-2">
         <div class="container-fluid">
-            <a class="navbar-brand" href="${origin}">
+            <a class="navbar-brand fw-bold" href="${origin}">
                 <i class="fas fa-dog me-2"></i>PaperDog API Docs
             </a>
             <div class="navbar-nav ms-auto">
@@ -482,7 +730,7 @@ export function getAPIDocsHTML(origin) {
 
             <!-- Main Content -->
             <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
-                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom" style="border-color:var(--color-gray-200) !important;">
                     <h1 class="h2">API Documentation</h1>
                 </div>
 
@@ -493,8 +741,8 @@ export function getAPIDocsHTML(origin) {
 
                     <div class="row">
                         <div class="col-md-6">
-                            <div class="card">
-                                <div class="card-header">
+                            <div class="card" style="border-radius:2px;">
+                                <div class="card-header" style="background:var(--color-gray-50);border-bottom:1px solid var(--color-gray-200);">
                                     <h5 class="mb-0">Base URL</h5>
                                 </div>
                                 <div class="card-body">
@@ -503,8 +751,8 @@ export function getAPIDocsHTML(origin) {
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <div class="card">
-                                <div class="card-header">
+                            <div class="card" style="border-radius:2px;">
+                                <div class="card-header" style="background:var(--color-gray-50);border-bottom:1px solid var(--color-gray-200);">
                                     <h5 class="mb-0">Authentication</h5>
                                 </div>
                                 <div class="card-body">
@@ -626,8 +874,8 @@ curl "${origin}/api/categories"
                     <h2>Model Context Protocol (MCP)</h2>
                     <p>PaperDog implements the Model Context Protocol for AI agent integration.</p>
 
-                    <div class="card">
-                        <div class="card-header">
+                    <div class="card" style="border-radius:2px;">
+                        <div class="card-header" style="background:var(--color-gray-50);border-bottom:1px solid var(--color-gray-200);">
                             <h5 class="mb-0">MCP Endpoint</h5>
                         </div>
                         <div class="card-body">
@@ -719,8 +967,8 @@ curl "${origin}/api/categories"
                     <h2>Code Examples</h2>
 
                     <!-- JavaScript Example -->
-                    <div class="card">
-                        <div class="card-header">
+                    <div class="card" style="border-radius:2px;">
+                        <div class="card-header" style="background:var(--color-gray-50);border-bottom:1px solid var(--color-gray-200);">
                             <h5 class="mb-0">JavaScript (REST API)</h5>
                         </div>
                         <div class="card-body">
@@ -738,8 +986,8 @@ data.papers.forEach(paper => {
                     </div>
 
                     <!-- Python Example -->
-                    <div class="card">
-                        <div class="card-header">
+                    <div class="card mt-3" style="border-radius:2px;">
+                        <div class="card-header" style="background:var(--color-gray-50);border-bottom:1px solid var(--color-gray-200);">
                             <h5 class="mb-0">Python (requests)</h5>
                         </div>
                         <div class="card-body">
@@ -763,8 +1011,8 @@ for paper in data['papers']:
                     </div>
 
                     <!-- MCP Example -->
-                    <div class="card">
-                        <div class="card-header">
+                    <div class="card mt-3" style="border-radius:2px;">
+                        <div class="card-header" style="background:var(--color-gray-50);border-bottom:1px solid var(--color-gray-200);">
                             <h5 class="mb-0">MCP Client Example</h5>
                         </div>
                         <div class="card-body">
@@ -803,7 +1051,7 @@ console.log('Search results:', result.result.content[0].text);
                 <section id="rate-limits" class="mb-5">
                     <h2>Rate Limits</h2>
 
-                    <div class="card">
+                    <div class="card" style="border-radius:2px;">
                         <div class="card-body">
                             <p>PaperDog implements IP-based rate limiting to ensure fair usage:</p>
 
@@ -826,9 +1074,7 @@ X-RateLimit-Reset: 1640995200
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
         // Smooth scrolling for navigation links

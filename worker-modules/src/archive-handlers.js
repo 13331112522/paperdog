@@ -206,6 +206,43 @@ export async function handleArchiveStatistics(request, env) {
   }
 }
 
+// Helper: determine if the request comes from a browser (vs API client)
+function isBrowserRequest(request) {
+  const accept = request.headers.get('Accept') || '';
+  return accept.includes('text/html');
+}
+
+// Helper: return a user-friendly HTML error page for browser requests
+function exportErrorHtmlResponse(message, status) {
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Export Error - PaperDog</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #F9FAFB; color: #374151; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+  .error-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 8px; padding: 2.5rem; max-width: 480px; text-align: center; }
+  .error-icon { font-size: 3rem; margin-bottom: 1rem; color: #EF4444; }
+  h1 { font-size: 1.25rem; margin: 0 0 0.75rem; color: #111827; }
+  p { color: #6B7280; margin: 0 0 1.5rem; line-height: 1.6; }
+  a { display: inline-block; background: #6366F1; color: #fff; padding: 0.6rem 1.5rem; border-radius: 6px; text-decoration: none; font-weight: 500; }
+  a:hover { background: #4F46E5; }
+</style>
+</head>
+<body>
+  <div class="error-card">
+    <div class="error-icon">&#9888;</div>
+    <h1>Export Unavailable</h1>
+    <p>${message}</p>
+    <a href="/archive">Back to Archive</a>
+  </div>
+</body>
+</html>`;
+  return new Response(html, {
+    status,
+    headers: { 'Content-Type': 'text/html; charset=utf-8', ...corsHeaders }
+  });
+}
+
 // Export archived papers
 export async function handleArchiveExport(request, env) {
   try {
@@ -253,7 +290,11 @@ export async function handleArchiveExport(request, env) {
       // Get all available archives
       const availableDates = await getAvailableArchiveDates(env);
       if (availableDates.length === 0) {
-        return errorResponse('No archived papers available for export', 404);
+        const noDataMsg = 'No archived papers are available for export yet. Papers are archived daily -- please check back later.';
+        if (isBrowserRequest(request)) {
+          return exportErrorHtmlResponse(noDataMsg, 404);
+        }
+        return jsonResponse({ error: noDataMsg, message: noDataMsg }, 404, -1);
       }
       archives = await Promise.all(
         availableDates.slice(0, 30).map(date => getArchivedPapers(date, env))
@@ -262,7 +303,11 @@ export async function handleArchiveExport(request, env) {
     }
 
     if (archives.length === 0) {
-      return errorResponse('No archived papers found for the specified criteria', 404);
+      const emptyMsg = 'No archived papers were found for the specified date range or criteria. Try widening your date range or removing filters.';
+      if (isBrowserRequest(request)) {
+        return exportErrorHtmlResponse(emptyMsg, 404);
+      }
+      return jsonResponse({ error: emptyMsg, message: emptyMsg }, 404, -1);
     }
 
     // Generate export
@@ -284,12 +329,18 @@ export async function handleArchiveExport(request, env) {
         'Content-Disposition': `attachment; filename="${exportResult.filename}"`,
         'Access-Control-Expose-Headers': 'Content-Disposition',
         'Content-Length': exportResult.content.length.toString(),
+        'Cache-Control': 'no-store',
         ...corsHeaders
       }
     });
   } catch (error) {
     logger.error('Error exporting archived papers:', error);
-    return errorResponse(error.message, error.statusCode || 500);
+    const status = error.statusCode || 500;
+    const errMsg = error.message || 'An unexpected error occurred while preparing the export.';
+    if (isBrowserRequest(request)) {
+      return exportErrorHtmlResponse(errMsg, status);
+    }
+    return jsonResponse({ error: errMsg, message: errMsg }, status, -1);
   }
 }
 
@@ -352,7 +403,7 @@ export async function handleCreateArchive(request, env) {
       date: date,
       papers_archived: result.papers_archived,
       metadata: result.metadata
-    });
+    }, 200, -1);
   } catch (error) {
     logger.error('Error creating archive:', error);
     return errorResponse(error.message, error.statusCode || 500);

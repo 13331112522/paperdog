@@ -553,7 +553,7 @@ export function getIndexHTML(papers = [], dailyReport = null) {
         </div>
     </footer>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Simple search functionality
         document.addEventListener('DOMContentLoaded', function() {
@@ -737,7 +737,7 @@ export function getReportHTML(report) {
         </div>
     </div>
     
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>`;
 }
@@ -863,7 +863,7 @@ export function getArchiveHTML(papers, options = {}) {
         ` : ''}
     </div>
     
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         function applyFilters() {
             const search = document.getElementById('searchInput').value;
@@ -882,6 +882,621 @@ export function getArchiveHTML(papers, options = {}) {
             }
         });
     </script>
+</body>
+</html>`;
+}
+
+export function getAboutHTML(formattedStats) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About - PaperDog</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Serif+SC:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            /* Warm Ivory / Terracotta Palette */
+            --color-primary-50: #FBF0EA;
+            --color-primary-100: #F5DFD2;
+            --color-primary-200: #E8C4AD;
+            --color-primary-500: #C0552D;
+            --color-primary-600: #A84825;
+            --color-primary-700: #8B3A1D;
+
+            /* Warm Neutrals */
+            --color-gray-50: #FDF8F0;
+            --color-gray-100: #F5EDE2;
+            --color-gray-200: #E0D8CE;
+            --color-gray-300: #C9BFB3;
+            --color-gray-500: #5C554D;
+            --color-gray-700: #4A4A4A;
+            --color-gray-900: #2C2C2C;
+
+            /* Ink & Body */
+            --color-ink: #2C2C2C;
+            --color-body: #3A3A3A;
+
+            /* Fonts */
+            --font-heading: 'Noto Serif SC', Georgia, 'Times New Roman', serif;
+            --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-code: 'JetBrains Mono', Menlo, 'Courier New', monospace;
+
+            /* Spacing Scale */
+            --spacing-1: 0.25rem;
+            --spacing-2: 0.5rem;
+            --spacing-3: 0.75rem;
+            --spacing-4: 1rem;
+            --spacing-5: 1.25rem;
+            --spacing-6: 1.5rem;
+            --spacing-8: 2rem;
+        }
+
+        body {
+            background: var(--color-gray-50);
+            font-family: var(--font-body);
+            font-size: 1rem;
+            line-height: 1.8;
+            color: var(--color-body);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.03;
+            pointer-events: none;
+            z-index: 9999;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            background-repeat: repeat;
+            background-size: 200px 200px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .about-content section {
+            animation: fadeInUp 0.4s ease-out forwards;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-family: var(--font-heading);
+            color: var(--color-ink);
+            line-height: 1.4;
+        }
+
+        .about-header {
+            background: var(--color-gray-50);
+            color: var(--color-ink);
+            padding: 3rem 0;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid var(--color-gray-200);
+            position: relative;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .about-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 60px;
+            height: 3px;
+            background: var(--color-primary-500);
+        }
+
+        .about-header .display-4 {
+            font-family: var(--font-heading);
+            font-weight: 700;
+            color: var(--color-ink);
+        }
+
+        .about-header .lead {
+            color: var(--color-gray-700);
+        }
+
+        .stats-card {
+            background: #FFFFFF;
+            border-radius: 2px;
+            padding: 1.5rem;
+            box-shadow: none;
+            border: 1px solid var(--color-gray-200);
+            transition: border-color 0.15s ease;
+        }
+
+        .stats-card:hover {
+            border-color: var(--color-primary-500);
+        }
+
+        .feature-icon {
+            font-size: 2.5rem;
+            color: var(--color-primary-500);
+            margin-bottom: 1rem;
+        }
+
+        .api-section {
+            background: var(--color-primary-500);
+            color: white;
+            border-radius: 2px;
+            padding: 2rem;
+        }
+
+        .api-section h3,
+        .api-section h6 {
+            color: white;
+        }
+
+        .api-section code {
+            font-family: var(--font-code);
+            background: rgba(255,255,255,0.15);
+            padding: 0.125rem 0.375rem;
+            border-radius: 2px;
+            font-size: 0.875rem;
+        }
+
+        .card {
+            background: #FFFFFF;
+            border-radius: 2px;
+            box-shadow: none;
+            border: 1px solid var(--color-gray-200);
+        }
+
+        .card h3 {
+            font-family: var(--font-heading);
+            font-weight: 700;
+            color: var(--color-ink);
+        }
+
+        .card .text-primary {
+            color: var(--color-primary-500) !important;
+        }
+
+        .nav-buttons .btn {
+            margin: 0.25rem;
+            border-radius: 2px;
+            font-family: var(--font-body);
+            font-weight: 500;
+            transition: all 0.15s ease;
+        }
+
+        .nav-buttons .btn-primary {
+            background: var(--color-primary-500);
+            border-color: var(--color-primary-500);
+        }
+
+        .nav-buttons .btn-primary:hover {
+            background: var(--color-primary-600);
+            border-color: var(--color-primary-600);
+        }
+
+        .nav-buttons .btn-outline-primary {
+            color: var(--color-primary-500);
+            border-color: var(--color-primary-500);
+        }
+
+        .nav-buttons .btn-outline-primary:hover {
+            background: var(--color-primary-500);
+            border-color: var(--color-primary-500);
+            color: white;
+        }
+
+        .nav-buttons .btn-outline-secondary {
+            color: var(--color-gray-700);
+            border-color: var(--color-gray-300);
+        }
+
+        .nav-buttons .btn-outline-secondary:hover {
+            background: var(--color-gray-100);
+            border-color: var(--color-gray-500);
+            color: var(--color-ink);
+        }
+
+        .nav-buttons .btn-outline-info {
+            color: var(--color-primary-500);
+            border-color: var(--color-gray-300);
+        }
+
+        .nav-buttons .btn-outline-info:hover {
+            background: var(--color-primary-50);
+            border-color: var(--color-primary-500);
+            color: var(--color-primary-500);
+        }
+
+        .visitor-badge {
+            background: var(--color-gray-100);
+            border: 1px solid var(--color-gray-200);
+            border-radius: 2px;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            color: var(--color-gray-700);
+        }
+
+        .text-muted {
+            color: var(--color-gray-500) !important;
+        }
+
+        .bg-primary {
+            background-color: var(--color-primary-500) !important;
+        }
+
+        .text-primary {
+            color: var(--color-primary-500) !important;
+        }
+
+        /* Dark Mode Support */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --color-gray-50: #1c1a16;
+                --color-gray-100: #262320;
+                --color-gray-200: #3a3632;
+                --color-gray-300: #524e48;
+                --color-gray-500: #9a958e;
+                --color-gray-700: #c9c3ba;
+                --color-gray-900: #F5EDE2;
+
+                --color-primary-50: #2e1f18;
+                --color-primary-100: #3d2a20;
+                --color-primary-200: #5c3f30;
+                --color-primary-500: #D4764E;
+                --color-primary-600: #C0552D;
+                --color-primary-700: #A84825;
+
+                --color-ink: #F5EDE2;
+                --color-body: #c9c3ba;
+            }
+
+            body {
+                background: #1c1a16;
+                color: var(--color-body);
+            }
+
+            .about-header {
+                background: #1c1a16;
+                border-bottom-color: var(--color-gray-200);
+            }
+
+            .stats-card, .card {
+                background: #262320;
+                border-color: var(--color-gray-200);
+            }
+
+            .api-section {
+                background: var(--color-primary-700);
+            }
+
+            .visitor-badge {
+                background: #262320;
+                border-color: var(--color-gray-200);
+                color: var(--color-gray-500);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .about-header {
+                padding: 2rem 0;
+            }
+
+            .about-header .display-4 {
+                font-size: 1.75rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="about-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-lg-8">
+                    <h1 class="display-4 mb-3">
+                        <i class="fas fa-info-circle me-3"></i>About PaperDog
+                    </h1>
+                    <p class="lead mb-0">Your AI-powered research paper companion</p>
+                </div>
+                <div class="col-lg-4 text-end">
+                    <div class="visitor-badge">
+                        <i class="fas fa-users me-2"></i>
+                        ${formattedStats.displayText}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="row">
+            <div class="col-lg-8 mx-auto">
+
+                <!-- Quick Stats -->
+                <div class="row mb-4">
+                    <div class="col-md-4 mb-3">
+                        <div class="stats-card text-center">
+                            <div class="feature-icon">
+                                <i class="fas fa-robot"></i>
+                            </div>
+                            <h5>AI Powered</h5>
+                            <p class="text-muted">GPT-4o & Gemini Analysis</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <div class="stats-card text-center">
+                            <div class="feature-icon">
+                                <i class="fas fa-sync-alt"></i>
+                            </div>
+                            <h5>Daily Updates</h5>
+                            <p class="text-muted">Automated Paper Collection</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <div class="stats-card text-center">
+                            <div class="feature-icon">
+                                <i class="fas fa-archive"></i>
+                            </div>
+                            <h5>Smart Archive</h5>
+                            <p class="text-muted">Top 10 Papers Daily</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- What is PaperDog -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h3 class="mb-3">
+                            <i class="fas fa-robot me-2"></i>What is PaperDog?
+                        </h3>
+                        <p class="lead">PaperDog is an automated system that collects, analyzes, and presents the latest AI and computer vision research papers from top sources like arXiv and HuggingFace.</p>
+                        <p>Our mission is to make cutting-edge AI research accessible to everyone by providing intelligent summaries, categorization, and easy-to-read analysis of complex academic papers.</p>
+                    </div>
+                </div>
+
+                <!-- Key Features -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h3 class="mb-3">
+                            <i class="fas fa-star me-2"></i>Key Features
+                        </h3>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-brain text-primary me-2"></i>AI-Powered Analysis</h6>
+                                <ul class="mb-4">
+                                    <li>GPT-4o and Gemini model analysis</li>
+                                    <li>500-word intelligent summaries</li>
+                                    <li>Relevance scoring (1-10 scale)</li>
+                                    <li>Technical depth assessment</li>
+                                </ul>
+
+                                <h6><i class="fas fa-tags text-primary me-2"></i>Smart Categorization</h6>
+                                <ul class="mb-4">
+                                    <li>Computer Vision</li>
+                                    <li>Machine Learning</li>
+                                    <li>Natural Language Processing</li>
+                                    <li>Reinforcement Learning</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-archive text-primary me-2"></i>Paper Archive System</h6>
+                                <ul class="mb-4">
+                                    <li>Top 10 papers archived daily</li>
+                                    <li>Date-based browsing</li>
+                                    <li>Advanced search & filtering</li>
+                                    <li>Multiple export formats</li>
+                                </ul>
+
+                                <h6><i class="fas fa-download text-primary me-2"></i>Export Options</h6>
+                                <ul class="mb-4">
+                                    <li>JSON format with full analysis</li>
+                                    <li>CSV for data analysis</li>
+                                    <li>Markdown for documentation</li>
+                                    <li>BibTeX for citations</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- How It Works -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h3 class="mb-3">
+                            <i class="fas fa-cogs me-2"></i>How It Works
+                        </h3>
+                        <div class="row">
+                            <div class="col-md-3 text-center mb-3">
+                                <div class="bg-primary bg-opacity-10 rounded-circle p-3 mx-auto mb-2" style="width: 60px; height: 60px;">
+                                    <i class="fas fa-download fa-2x text-primary"></i>
+                                </div>
+                                <h6>Daily Scraping</h6>
+                                <p class="small text-muted">Automatically collects new papers from arXiv and HuggingFace</p>
+                            </div>
+                            <div class="col-md-3 text-center mb-3">
+                                <div class="bg-primary bg-opacity-10 rounded-circle p-3 mx-auto mb-2" style="width: 60px; height: 60px;">
+                                    <i class="fas fa-brain fa-2x text-primary"></i>
+                                </div>
+                                <h6>AI Analysis</h6>
+                                <p class="small text-muted">Uses advanced language models to analyze each paper's content</p>
+                            </div>
+                            <div class="col-md-3 text-center mb-3">
+                                <div class="bg-primary bg-opacity-10 rounded-circle p-3 mx-auto mb-2" style="width: 60px; height: 60px;">
+                                    <i class="fas fa-filter fa-2x text-primary"></i>
+                                </div>
+                                <h6>Smart Curation</h6>
+                                <p class="small text-muted">Filters and ranks papers based on quality and importance</p>
+                            </div>
+                            <div class="col-md-3 text-center mb-3">
+                                <div class="bg-primary bg-opacity-10 rounded-circle p-3 mx-auto mb-2" style="width: 60px; height: 60px;">
+                                    <i class="fas fa-chart-line fa-2x text-primary"></i>
+                                </div>
+                                <h6>Beautiful Presentation</h6>
+                                <p class="small text-muted">Presents papers in an easy-to-read blog format</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Archive System -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h3 class="mb-3">
+                            <i class="fas fa-archive me-2"></i>Paper Archive System
+                        </h3>
+                        <p class="mb-3">Our intelligent archive system stores only the top 10 highest-scoring papers each day, ensuring quality over quantity:</p>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-calendar-alt text-primary me-2"></i>Date-Based Browsing</h6>
+                                <p class="text-muted mb-3">Browse papers by specific dates with an intuitive calendar interface</p>
+
+                                <h6><i class="fas fa-search text-primary me-2"></i>Advanced Search</h6>
+                                <p class="text-muted mb-3">Search within archived content with filters for categories, scores, and date ranges</p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-download text-primary me-2"></i>Multiple Export Formats</h6>
+                                <p class="text-muted mb-3">Export papers in JSON, CSV, Markdown, or BibTeX formats for different use cases</p>
+
+                                <h6><i class="fas fa-chart-bar text-primary me-2"></i>Statistics Dashboard</h6>
+                                <p class="text-muted mb-3">View archive statistics including paper distribution and visitor analytics</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- API Section -->
+                <div class="api-section mb-4">
+                    <h3 class="mb-3">
+                        <i class="fas fa-code me-2"></i>Developer API
+                    </h3>
+                    <p class="mb-3">Access PaperDog's functionality programmatically through our REST API:</p>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-file-alt me-2"></i>Paper Endpoints</h6>
+                            <ul class="mb-3">
+                                <li><code>GET /api/papers</code> - List papers</li>
+                                <li><code>GET /api/papers/:date</code> - Papers by date</li>
+                                <li><code>GET /api/search?q=query</code> - Search papers</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-archive me-2"></i>Archive Endpoints</h6>
+                            <ul class="mb-3">
+                                <li><code>GET /api/archive/dates</code> - Available dates</li>
+                                <li><code>GET /api/archive/:date</code> - Archive by date</li>
+                                <li><code>GET /api/archive/export</code> - Export data</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="text-center">
+                        <a href="/api/papers" class="btn btn-light btn-sm me-2">
+                            <i class="fas fa-external-link-alt me-1"></i>View API Docs
+                        </a>
+                        <a href="/api/archive/export/formats" class="btn btn-light btn-sm">
+                            <i class="fas fa-download me-1"></i>Export Formats
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Technical Details -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h3 class="mb-3">
+                            <i class="fas fa-server me-2"></i>Technical Architecture
+                        </h3>
+                        <p>PaperDog is built with modern, scalable technologies:</p>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-cloud text-primary me-2"></i>Backend Infrastructure</h6>
+                                <ul class="mb-3">
+                                    <li><strong>Cloudflare Workers:</strong> Serverless edge computing</li>
+                                    <li><strong>Cloudflare KV:</strong> Distributed key-value storage</li>
+                                    <li><strong>Global CDN:</strong> Fast content delivery worldwide</li>
+                                </ul>
+
+                                <h6><i class="fas fa-brain text-primary me-2"></i>AI Integration</h6>
+                                <ul class="mb-3">
+                                    <li><strong>OpenRouter API:</strong> Access to GPT-4o, Gemini, Claude</li>
+                                    <li><strong>Intelligent Analysis:</strong> Automated paper evaluation</li>
+                                    <li><strong>Scoring System:</strong> 1-10 relevance scoring</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-database text-primary me-2"></i>Data Sources</h6>
+                                <ul class="mb-3">
+                                    <li><strong>arXiv API:</strong> Latest academic papers</li>
+                                    <li><strong>HuggingFace:</strong> ML community papers</li>
+                                    <li><strong>Web Scraping:</strong> Additional content sources</li>
+                                </ul>
+
+                                <h6><i class="fas fa-palette text-primary me-2"></i>Frontend Technologies</h6>
+                                <ul class="mb-3">
+                                    <li><strong>Bootstrap 5:</strong> Responsive UI framework</li>
+                                    <li><strong>Font Awesome:</strong> Professional icons</li>
+                                    <li><strong>Modern CSS:</strong> Gradient designs and animations</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Visit Stats -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h3 class="mb-3">
+                            <i class="fas fa-chart-line me-2"></i>Visitor Statistics
+                        </h3>
+                        <div class="row text-center">
+                            <div class="col-md-4">
+                                <h4 class="text-primary">${formattedStats.today}</h4>
+                                <p class="text-muted">Today's Visitors</p>
+                            </div>
+                            <div class="col-md-4">
+                                <h4 class="text-primary">${formattedStats.total}</h4>
+                                <p class="text-muted">Total Visitors</p>
+                            </div>
+                            <div class="col-md-4">
+                                <h4 class="text-primary">${formattedStats.thisMonth}</h4>
+                                <p class="text-muted">This Month</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Navigation -->
+                <div class="text-center nav-buttons">
+                    <a href="/" class="btn btn-primary btn-lg me-2">
+                        <i class="fas fa-home me-2"></i>Back to Home
+                    </a>
+                    <a href="/archive" class="btn btn-outline-primary btn-lg me-2">
+                        <i class="fas fa-archive me-2"></i>Browse Archive
+                    </a>
+                    <a href="/api/papers" class="btn btn-outline-secondary btn-lg me-2">
+                        <i class="fas fa-code me-2"></i>API Documentation
+                    </a>
+                    <a href="/feed" class="btn btn-outline-info btn-lg">
+                        <i class="fas fa-rss me-2"></i>RSS Feed
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>`;
 }

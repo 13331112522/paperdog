@@ -289,8 +289,101 @@ class CircuitBreaker {
 const circuitBreakers = {
   huggingfaceApi: new CircuitBreaker('huggingface-api', { failureThreshold: 3, resetTimeout: 300000 }),
   huggingfaceScraping: new CircuitBreaker('huggingface-scraping', { failureThreshold: 5, resetTimeout: 600000 }),
-  arxivApi: new CircuitBreaker('arxiv-api', { failureThreshold: 3, resetTimeout: 300000 })
+  huggingfaceDailyPapers: new CircuitBreaker('huggingface-daily-papers', { failureThreshold: 3, resetTimeout: 300000 }),
+  arxivApi: new CircuitBreaker('arxiv-api', { failureThreshold: 3, resetTimeout: 300000 }),
+  arxivHtml: new CircuitBreaker('arxiv-html', { failureThreshold: 5, resetTimeout: 600000 })
 };
+
+/**
+ * Extract figure URLs and captions from arXiv HTML versions.
+ * Fetches the HTML page for each unique arXiv ID, parses <img class="ltx_graphics">
+ * tags to get figure URLs and parent <figcaption> text.
+ * Updates paper.images and adds paper.figures array.
+ * @param {Array} papers - Array of paper objects with arxiv_id field
+ * @returns {Promise<void>} Modifies papers in place
+ */
+export async function extractPaperFigures(papers) {
+  const uniqueIds = [...new Set(
+    papers.map(p => p.arxiv_id).filter(Boolean)
+  )].slice(0, 20);
+
+  if (uniqueIds.length === 0) return;
+
+  const figureMap = new Map();
+
+  for (const arxivId of uniqueIds) {
+    if (!circuitBreakers.arxivHtml.canExecute()) {
+      logger.warn('arXiv HTML circuit breaker open, skipping remaining');
+      break;
+    }
+
+    try {
+      const htmlUrl = `https://arxiv.org/html/${arxivId}`;
+      const response = await fetchWithTimeout(htmlUrl, 15000, {
+        headers: { 'Accept': 'text/html' },
+      });
+
+      if (!response.ok) {
+        circuitBreakers.arxivHtml.recordFailure();
+        continue;
+      }
+
+      const html = await response.text();
+
+      // Extract figures: find <img class="ltx_graphics ..."> tags and their parent <figcaption>
+      const figures = [];
+      const imgRegex = /class="ltx_graphics[^"]*"[^>]*src="([^"]+)"/g;
+      let imgMatch;
+
+      while ((imgMatch = imgRegex.exec(html)) !== null) {
+        let src = imgMatch[1];
+
+        // Resolve relative paths
+        if (!src.startsWith('http')) {
+          src = `https://arxiv.org/html/${arxivId}/${src.replace(/^\.\//, '')}`;
+        }
+
+        // Find caption in the surrounding <figure> block
+        let caption = '';
+        const figStart = html.lastIndexOf('<figure', imgMatch.index);
+        const figEnd = html.indexOf('</figure>', imgMatch.index);
+        if (figStart !== -1 && figEnd !== -1 && figStart < imgMatch.index) {
+          const figBlock = html.substring(figStart, figEnd);
+          const capMatch = figBlock.match(/<figcaption[^>]*>([\s\S]*?)<\/figcaption>/);
+          if (capMatch) {
+            caption = capMatch[1].replace(/<[^>]*>/g, '').trim();
+          }
+        }
+
+        figures.push({ url: src, caption });
+      }
+
+      if (figures.length > 0) {
+        figureMap.set(arxivId, figures);
+        logger.info(`Extracted ${figures.length} figures from ${arxivId}`);
+      }
+
+      circuitBreakers.arxivHtml.recordSuccess();
+    } catch (error) {
+      logger.warn(`Failed to extract figures for ${arxivId}: ${error.message}`);
+      circuitBreakers.arxivHtml.recordFailure();
+    }
+
+    // Rate limit: 1s between requests
+    await sleep(1000);
+  }
+
+  // Update paper objects with extracted figures
+  for (const paper of papers) {
+    const arxivId = paper.arxiv_id;
+    if (!arxivId || !figureMap.has(arxivId)) continue;
+
+    const figures = figureMap.get(arxivId);
+    paper.figures = figures;
+    // Also update images array with all figure URLs (backward compatible)
+    paper.images = figures.map(f => f.url);
+  }
+}
 
 export async function scrapeDailyPapers() {
   const today = new Date().toISOString().split('T')[0];
@@ -300,18 +393,19 @@ export async function scrapeDailyPapers() {
     // Add overall timeout protection for the entire scraping process
     const scrapingPromise = Promise.allSettled([
       scrapeArxivPapers(),
-      scrapeHuggingfacePapers()
+      scrapeHuggingfacePapers(),
+      scrapeHuggingFaceDailyPapers()
     ]);
 
     const timeoutPromise = createTimeout(5 * 60 * 1000, 'Paper scraping timeout after 5 minutes');
 
-    const [arxivPapers, huggingfacePapers] = await Promise.race([
+    const [arxivPapers, huggingfacePapers, hfDailyPapers] = await Promise.race([
       scrapingPromise,
       timeoutPromise.then(() => { throw new Error('Paper scraping timeout after 5 minutes'); })
     ]);
-    
+
     const allPapers = [];
-    
+
     // Process arXiv results
     if (arxivPapers.status === 'fulfilled' && arxivPapers.value.length > 0) {
       logger.info(`Scraped ${arxivPapers.value.length} papers from arXiv`);
@@ -319,13 +413,21 @@ export async function scrapeDailyPapers() {
     } else if (arxivPapers.status === 'rejected') {
       logger.error('Failed to scrape arXiv papers:', { error: arxivPapers.reason.message });
     }
-    
+
     // Process HuggingFace results
     if (huggingfacePapers.status === 'fulfilled' && huggingfacePapers.value.length > 0) {
       logger.info(`Scraped ${huggingfacePapers.value.length} papers from HuggingFace`);
       allPapers.push(...huggingfacePapers.value);
     } else if (huggingfacePapers.status === 'rejected') {
       logger.error('Failed to scrape HuggingFace papers:', { error: huggingfacePapers.reason.message });
+    }
+
+    // Process HuggingFace daily_papers API results
+    if (hfDailyPapers.status === 'fulfilled' && hfDailyPapers.value.length > 0) {
+      logger.info(`Scraped ${hfDailyPapers.value.length} papers from HuggingFace daily_papers API`);
+      allPapers.push(...hfDailyPapers.value);
+    } else if (hfDailyPapers.status === 'rejected') {
+      logger.error('Failed to scrape HuggingFace daily_papers:', { error: hfDailyPapers.reason.message });
     }
     
     // Remove duplicates based on title similarity
@@ -402,6 +504,9 @@ function parseArxivEntry(entry) {
       return null;
     }
     
+    // Generate figure thumbnail URL from arXiv ID
+    const images = arxivId ? [`https://arxiv.org/html/${arxivId}/x1.png`] : [];
+
     return {
       id: `arxiv_${arxivId}`,
       arxiv_id: arxivId,
@@ -415,7 +520,8 @@ function parseArxivEntry(entry) {
       original_source: 'arxiv', // 明确标记原始来源
       url: id,
       pdf_url: id.replace('/abs/', '/pdf/') + '.pdf',
-      scraped_at: new Date().toISOString()
+      scraped_at: new Date().toISOString(),
+      images: images
     };
   } catch (error) {
     logger.error('Error parsing arXiv entry:', error);
@@ -547,6 +653,124 @@ async function scrapeHuggingfacePapers() {
   });
 }
 
+async function scrapeHuggingFaceDailyPapers() {
+  return await circuitBreakers.huggingfaceDailyPapers.execute(async () => {
+    logger.info('Scraping HuggingFace daily_papers API');
+
+    try {
+      const url = 'https://huggingface.co/api/daily_papers?sort=trending&limit=50';
+      const response = await fetchWithTimeout(url, 30000, {
+        headers: {
+          'User-Agent': 'PaperDog-Bot/1.0 (https://paperdog.org)',
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HuggingFace daily_papers API returned ${response.status}`);
+      }
+
+      const rawPapers = await response.json();
+
+      if (!Array.isArray(rawPapers) || rawPapers.length === 0) {
+        logger.warn('HuggingFace daily_papers API returned empty or non-array response');
+        return [];
+      }
+
+      logger.info(`HuggingFace daily_papers API returned ${rawPapers.length} raw paper entries`);
+
+      const papers = [];
+      for (const raw of rawPapers) {
+        try {
+          const paper = parseHuggingFaceDailyPaper(raw);
+          if (paper) {
+            papers.push(paper);
+          }
+        } catch (error) {
+          logger.warn(`Failed to parse HuggingFace daily_paper entry: ${error.message}`);
+        }
+      }
+
+      logger.info(`Parsed ${papers.length} valid papers from HuggingFace daily_papers API`);
+      return papers;
+    } catch (error) {
+      logger.error('Error scraping HuggingFace daily_papers API:', error);
+      throw new AppError(`HuggingFace daily_papers API scraping failed: ${error.message}`);
+    }
+  });
+}
+
+function parseHuggingFaceDailyPaper(raw) {
+  try {
+    // The daily_papers API nests paper details under a "paper" key
+    const paperData = raw.paper || raw;
+    const id = paperData.id || raw.id || '';
+    const title = paperData.title || '';
+    const summary = paperData.summary || raw.summary || '';
+
+    if (!title) {
+      logger.warn('Skipping HuggingFace daily_paper entry with missing title');
+      return null;
+    }
+
+    // Extract authors from the nested structure
+    let authors = [];
+    if (Array.isArray(paperData.authors)) {
+      authors = paperData.authors.map(a => {
+        if (typeof a === 'string') return a;
+        if (typeof a === 'object' && a.name) return a.name;
+        return '';
+      }).filter(a => a.length > 0);
+    }
+
+    // Build the arXiv URL from the paper id (which is an arXiv ID)
+    const arxivId = id || '';
+    const paperUrl = arxivId ? `https://huggingface.co/papers/${arxivId}` : '';
+    const pdfUrl = arxivId ? `https://arxiv.org/pdf/${arxivId}` : '';
+
+    // Infer category from title and abstract
+    const text = `${title} ${summary}`.toLowerCase();
+    let category = 'machine_learning';
+
+    if (text.includes('vision') || text.includes('image') || text.includes('visual')) {
+      category = 'computer_vision';
+    } else if (text.includes('nlp') || text.includes('language') || text.includes('text')) {
+      category = 'natural_language_processing';
+    } else if (text.includes('reinforcement') || text.includes('rl') || text.includes('agent')) {
+      category = 'reinforcement_learning';
+    }
+
+    // Generate figure thumbnail URL from arXiv ID
+    const images = arxivId ? [`https://arxiv.org/html/${arxivId}/x1.png`] : [];
+
+    return {
+      id: `hf_daily_${arxivId || Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      arxiv_id: arxivId,
+      title: title,
+      abstract: summary,
+      authors: authors,
+      published: raw.published_at || paperData.publishedAt || new Date().toISOString().split('T')[0],
+      updated: new Date().toISOString(),
+      category: category,
+      source: 'huggingface',
+      original_source: 'huggingface_daily_papers',
+      url: paperUrl,
+      pdf_url: pdfUrl,
+      scraped_at: new Date().toISOString(),
+      images: images,
+      // Extra fields from the daily_papers API
+      upvotes: typeof raw.upvotes === 'number' ? raw.upvotes : 0,
+      ai_summary: raw.ai_summary || '',
+      ai_keywords: Array.isArray(raw.ai_keywords) ? raw.ai_keywords : [],
+      github_repo: raw.github_repo || '',
+      github_stars: typeof raw.github_stars === 'number' ? raw.github_stars : 0
+    };
+  } catch (error) {
+    logger.error('Error parsing HuggingFace daily_paper entry:', error);
+    return null;
+  }
+}
+
 async function parseHuggingfacePaper(element, apiKey = null) {
   try {
     // The element is now an object with pre-extracted properties
@@ -641,6 +865,12 @@ async function parseHuggingfacePaper(element, apiKey = null) {
       category = 'reinforcement_learning';
     }
 
+    // Try to extract arXiv ID from the link for figure thumbnail
+    const fullLink = link.startsWith('http') ? link : `https://huggingface.co${link}`;
+    const arxivIdMatch = fullLink.match(/\/papers\/(\d{4}\.\d{4,5})/);
+    const hfArxivId = arxivIdMatch ? arxivIdMatch[1] : '';
+    const images = hfArxivId ? [`https://arxiv.org/html/${hfArxivId}/x1.png`] : [];
+
     return {
       id: id,
       title: title,
@@ -651,10 +881,11 @@ async function parseHuggingfacePaper(element, apiKey = null) {
       category: category,
       source: 'huggingface',
       original_source: 'huggingface_enhanced', // Mark as enhanced scraping
-      url: link.startsWith('http') ? link : `https://huggingface.co${link}`,
+      url: fullLink,
       pdf_url: '', // HuggingFace may not provide direct PDF links
       scraped_at: new Date().toISOString(),
-      abstract_quality: abstractQuality.score
+      abstract_quality: abstractQuality.score,
+      images: images
     };
   } catch (error) {
     logger.error('Error parsing HuggingFace paper:', error);
@@ -1625,6 +1856,12 @@ function parseHuggingFaceAPIResponse(apiData) {
     
     for (const paperData of papersData) {
       try {
+        // Try to extract arXiv ID from paperData.id or URL for figure thumbnail
+        const apiArxivId = (paperData.id && /^\d{4}\.\d{4,5}$/.test(paperData.id))
+          ? paperData.id
+          : '';
+        const apiImages = apiArxivId ? [`https://arxiv.org/html/${apiArxivId}/x1.png`] : [];
+
         const paper = {
           id: `hf_${paperData.id || Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           title: paperData.title || '',
@@ -1637,7 +1874,8 @@ function parseHuggingFaceAPIResponse(apiData) {
           original_source: 'huggingface_api', // 明确标记API来源
           url: paperData.url || `https://huggingface.co/papers/${paperData.id}`,
           pdf_url: paperData.pdfUrl || '',
-          scraped_at: new Date().toISOString()
+          scraped_at: new Date().toISOString(),
+          images: apiImages
         };
         
         if (paper.title) {
@@ -1844,6 +2082,7 @@ function removeDuplicatePapers(papers) {
 export {
   scrapeArxivPapers,
   scrapeHuggingfacePapers,
+  scrapeHuggingFaceDailyPapers,
   parseArxivEntry,
   parseHuggingfacePaper,
   sanitizeJsonContent,

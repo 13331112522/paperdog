@@ -12,6 +12,7 @@ import {
   handleAbout,
   handleBlog,
   handleBlogPost,
+  handleBlogImage,
   handleScoringReport,
   handleTrackPaperView,
   handleArchivePage,
@@ -39,6 +40,7 @@ const handlers = {
   handleAbout,
   handleBlog,
   handleBlogPost,
+  handleBlogImage,
   handleScoringReport,
   handleTrackPaperView,
   handleArchivePage,
@@ -86,6 +88,7 @@ export default {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type',
+            'Cache-Control': 'public, max-age=86400',
           }
         });
       }
@@ -100,6 +103,7 @@ export default {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type',
+            'Cache-Control': 'no-store',
           }
         });
       }
@@ -122,6 +126,16 @@ export default {
       if (path === '/ai-agents.txt' && method === 'GET') {
         debugUtils.debugLog('Handling AI agents.txt request');
         return await handleAIAgentsTxt(request, env);
+      }
+
+      // Static utility routes
+      if (url.pathname === '/robots.txt') {
+          return new Response('User-agent: *\nAllow: /\nSitemap: https://paperdog.org/sitemap.xml', {
+              headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'public, max-age=86400' }
+          });
+      }
+      if (url.pathname === '/favicon.ico') {
+          return new Response(null, { status: 204, headers: { 'Cache-Control': 'public, max-age=604800' } });
       }
 
       // Route matching
@@ -337,6 +351,7 @@ async function handleArchive(request, env) {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
+        'Cache-Control': 'public, max-age=300',
       }
     });
   } catch (error) {
@@ -361,13 +376,14 @@ async function handleReportByDate(request, env, date) {
     
     const report = await generateDailyReport(papers, date);
     const html = getReportHTML(report);
-    
+
     return new Response(html, {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
+        'Cache-Control': 'public, max-age=300',
       }
     });
   } catch (error) {
@@ -431,6 +447,7 @@ async function handleMCPDiscovery(request, env) {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
+        'Cache-Control': 'public, max-age=3600',
       }
     });
   } catch (error) {
@@ -451,6 +468,7 @@ async function handleForAIAgents(request, env) {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
+        'Cache-Control': 'public, max-age=3600',
       }
     });
   } catch (error) {
@@ -471,6 +489,7 @@ async function handleAPIDocs(request, env) {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
+        'Cache-Control': 'public, max-age=3600',
       }
     });
   } catch (error) {
@@ -533,6 +552,7 @@ Archive-Size: Growing daily archive`;
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
+        'Cache-Control': 'public, max-age=3600',
       }
     });
   } catch (error) {

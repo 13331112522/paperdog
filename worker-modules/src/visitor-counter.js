@@ -26,7 +26,7 @@ function generateVisitorId(ip, userAgent) {
     hash = ((hash << 5) - hash) + char;
     hash = hash & hash; // Convert to 32bit integer
   }
-  return Math.abs(hash).toString(36);
+  return (hash >>> 0).toString(36);
 }
 
 // Get current date in YYYY-MM-DD format
@@ -45,11 +45,22 @@ export async function trackVisitor(request, env) {
   try {
     const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
     const userAgent = request.headers.get('User-Agent') || 'unknown';
+
+    // Bot detection - don't count automated traffic
+    const ua = (userAgent || '').toLowerCase();
+    const botPatterns = ['bot', 'crawl', 'spider', 'slurp', 'mediapartners', 'feedfetcher', 'curl/', 'python-requests', 'httpclient', 'wget/', 'headlesschrome'];
+    if (botPatterns.some(p => ua.includes(p))) {
+      return { isNewVisitor: false, today: 0, total: 0, thisMonth: 0 };
+    }
+    if (request.cf && request.cf.bot) {
+      return { isNewVisitor: false, today: 0, total: 0, thisMonth: 0 };
+    }
+
     const today = getCurrentDate();
     const currentMonth = getCurrentMonth();
     const visitorId = generateVisitorId(ip, userAgent);
 
-    logger.info('Tracking visitor', { ip, visitorId, date: today });
+    logger.info('Tracking visitor', { visitorId, date: today });
 
     // Check if this visitor was already counted today
     const todayVisitorKey = `${VISITOR_KEYS.ip_hash(visitorId)}_${today}`;
@@ -83,13 +94,13 @@ export async function trackVisitor(request, env) {
         expirationTtl: 32 * 24 * 60 * 60 // Keep for ~1 month
       });
 
-      logger.info('New visitor counted', { visitorId, daily: newDailyCount, total: newTotalCount });
+      logger.info('New visitor counted', { visitorId, today: newDailyCount, total: newTotalCount });
 
       return {
         isNewVisitor: true,
-        daily: newDailyCount,
+        today: newDailyCount,
         total: newTotalCount,
-        monthly: newMonthlyCount
+        thisMonth: newMonthlyCount
       };
     } else {
       // Get current counts for returning visitor
@@ -99,9 +110,9 @@ export async function trackVisitor(request, env) {
 
       return {
         isNewVisitor: false,
-        daily: parseInt(dailyCount),
+        today: parseInt(dailyCount),
         total: parseInt(totalCount),
-        monthly: parseInt(monthlyCount)
+        thisMonth: parseInt(monthlyCount)
       };
     }
   } catch (error) {
@@ -109,9 +120,9 @@ export async function trackVisitor(request, env) {
     // Return default values if tracking fails
     return {
       isNewVisitor: false,
-      daily: 0,
+      today: 0,
       total: 0,
-      monthly: 0,
+      thisMonth: 0,
       error: error.message
     };
   }

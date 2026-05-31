@@ -75,7 +75,7 @@ export async function analyzePapers(papers, apiKey, glmFallbackConfig = null) {
   logger.info(`Starting analysis of ${papers.length} papers`);
   
   const analyzedPapers = [];
-  const BATCH_SIZE = 3; // Process 3 papers in parallel for better performance
+  const BATCH_SIZE = 5; // Process 5 papers in parallel for better performance
 
   for (let i = 0; i < papers.length; i += BATCH_SIZE) {
     const batch = papers.slice(i, i + BATCH_SIZE);
@@ -118,7 +118,7 @@ export async function analyzePapers(papers, apiKey, glmFallbackConfig = null) {
 
     // Add delay between batches to avoid rate limiting
     if (i + BATCH_SIZE < papers.length) {
-      const delay = Math.min(1000 + (Math.ceil(i / BATCH_SIZE) * 200), 3000);
+      const delay = Math.min(500 + (Math.ceil(i / BATCH_SIZE) * 150), 2000);
       logger.debug(`Waiting ${delay}ms before next batch...`);
       await sleep(delay);
     }

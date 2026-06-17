@@ -209,14 +209,25 @@ export async function analyzeSinglePaper(paper, apiKey, glmFallbackConfig = null
 }
 
 async function callLLM(prompt, model, params, apiKey, fallbackConfig = null) {
-  // Try OpenRouter first
+  // GLM models go through Zhipu first
+  const isGLMModel = model.startsWith('glm-');
+  if (isGLMModel && fallbackConfig) {
+    try {
+      return await callGLM(prompt, model, params, fallbackConfig);
+    } catch (glmError) {
+      logger.warn(`GLM API failed:`, glmError.message);
+      // Fall through to OpenRouter as fallback
+    }
+  }
+
+  // OpenRouter
   try {
     return await callOpenRouter(prompt, model, params, apiKey);
   } catch (openRouterError) {
     logger.warn(`OpenRouter API failed:`, openRouterError.message);
 
-    // If fallback config is provided, try GLM
-    if (fallbackConfig) {
+    // If not already tried GLM, try it now as fallback
+    if (!isGLMModel && fallbackConfig) {
       logger.info('Attempting fallback to GLM API');
       try {
         return await callGLM(prompt, model, params, fallbackConfig);
@@ -226,7 +237,6 @@ async function callLLM(prompt, model, params, apiKey, fallbackConfig = null) {
       }
     }
 
-    // No fallback available, re-throw the original error
     throw openRouterError;
   }
 }
@@ -332,8 +342,9 @@ async function callGLM(prompt, model, params, glmConfig) {
     'Authorization': `Bearer ${glmConfig.apiKey}`
   };
 
-  // GLM model mapping - if OpenRouter model is requested, map to GLM model
-  const glmModel = glmConfig.model || 'glm-4-air';
+  // GLM model: use explicit model name if it's a GLM model, otherwise config default
+  const isGLMModelId = model && model.startsWith('glm-');
+  const glmModel = isGLMModelId ? model : (glmConfig.model || 'glm-4-flashx');
 
   const requestBody = {
     model: glmModel,

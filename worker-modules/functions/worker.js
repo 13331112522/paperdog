@@ -1,5 +1,5 @@
 // Main entry point - imports all modules and sets up the worker
-import { routes } from '../src/config.js';
+import { routes, getGLMFallbackConfig } from '../src/config.js';
 import {
   handleRoot,
   handlePapersList,
@@ -22,10 +22,11 @@ import { archiveHandlers } from '../src/archive-handlers.js';
 import { scrapeDailyPapers } from '../src/paper-scraper.js';
 import { analyzePapers } from '../src/paper-analyzer.js';
 import { generateDailyReport } from '../src/blog-generator.js';
-import { errorResponse, cachePapers } from '../src/utils.js';
+import { errorResponse, cachePapers, jsonResponse, textResponse, markdownResponse } from '../src/utils.js';
 import { archivePapers } from '../src/archive-manager.js';
 import { debugUtils } from '../src/debug-utils.js';
 import { MCPServer, cleanupRateLimits } from '../src/mcp-server.js';
+import { getLlmsTxt, getLlmsFullTxt, getAgentManifest, formatAsMarkdown } from '../src/agent-cli.js';
 
 // Handler mapping - direct function calls instead of eval
 const handlers = {
@@ -63,6 +64,29 @@ const handlers = {
 
 // MCP Server instance
 let mcpServer = null;
+
+// Content negotiation: convert JSON responses to markdown for CLI agents
+async function maybeConvertToMarkdown(response, request, handlerName) {
+  const contentType = response.headers.get('Content-Type') || '';
+  if (!contentType.includes('application/json')) return response;
+
+  const url = new URL(request.url);
+  const format = url.searchParams.get('format');
+  const accept = request.headers.get('Accept') || '';
+  const wantsText = format === 'text' ||
+    (accept.includes('text/plain') && !accept.includes('text/html')) ||
+    accept.includes('text/markdown');
+
+  if (!wantsText) return response;
+
+  try {
+    const data = await response.json();
+    const md = formatAsMarkdown(data, handlerName);
+    return markdownResponse(md);
+  } catch (e) {
+    return response;
+  }
+}
 
 // Main Fetch Handler
 export default {
@@ -115,11 +139,19 @@ export default {
 
       if (path === '/for-ai-agents' && method === 'GET') {
         debugUtils.debugLog('Handling AI agents page request');
+        const accept = request.headers.get('Accept') || '';
+        if (accept.includes('text/plain') || accept.includes('text/markdown')) {
+          return textResponse(getLlmsFullTxt(url.origin));
+        }
         return await handleForAIAgents(request, env);
       }
 
       if (path === '/api/docs' && method === 'GET') {
         debugUtils.debugLog('Handling API docs request');
+        const accept = request.headers.get('Accept') || '';
+        if (accept.includes('text/plain') || accept.includes('text/markdown')) {
+          return textResponse(getLlmsFullTxt(url.origin));
+        }
         return await handleAPIDocs(request, env);
       }
 
@@ -128,10 +160,41 @@ export default {
         return await handleAIAgentsTxt(request, env);
       }
 
+      // Agent CLI routes
+      if (path === '/llms.txt' && method === 'GET') {
+        return textResponse(getLlmsTxt(url.origin), 200, 3600);
+      }
+
+      if (path === '/llms-full.txt' && method === 'GET') {
+        return textResponse(getLlmsFullTxt(url.origin), 200, 3600);
+      }
+
+      if (path === '/agent' && method === 'GET') {
+        return jsonResponse(getAgentManifest(url.origin), 200, 3600);
+      }
+
       // Static utility routes
       if (url.pathname === '/robots.txt') {
           return new Response('User-agent: *\nAllow: /\nSitemap: https://paperdog.org/sitemap.xml', {
               headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'public, max-age=86400' }
+          });
+      }
+      if (url.pathname === '/sitemap.xml') {
+          const origin = url.origin;
+          const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${origin}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>
+  <url><loc>${origin}/about</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>${origin}/archive</loc><changefreq>daily</changefreq><priority>0.8</priority></url>
+  <url><loc>${origin}/blog</loc><changefreq>daily</changefreq><priority>0.7</priority></url>
+  <url><loc>${origin}/for-ai-agents</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
+  <url><loc>${origin}/api/docs</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
+  <url><loc>${origin}/llms.txt</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>${origin}/agent</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>${origin}/feed</loc><changefreq>daily</changefreq><priority>0.5</priority></url>
+</urlset>`;
+          return new Response(sitemap, {
+              headers: { 'Content-Type': 'application/xml', 'Cache-Control': 'public, max-age=86400' }
           });
       }
       if (url.pathname === '/favicon.ico') {
@@ -159,19 +222,19 @@ export default {
               }
               if (match && paramValue) {
                 debugUtils.debugLog('Route matched with parameter', { pattern, handlerName, paramValue });
-                // Call handler directly using handler mapping
                 const handler = handlers[handlerName];
                 if (handler) {
-                  return await handler(request, env, paramValue);
+                  const response = await handler(request, env, paramValue);
+                  return await maybeConvertToMarkdown(response, request, handlerName);
                 }
               }
             }
           } else if (path === routePath) {
             debugUtils.debugLog('Route matched', { path, handlerName });
-            // Call handler directly using handler mapping
             const handler = handlers[handlerName];
             if (handler) {
-              return await handler(request, env);
+              const response = await handler(request, env);
+              return await maybeConvertToMarkdown(response, request, handlerName);
             }
           }
         }
@@ -201,7 +264,15 @@ export default {
         console.error('❌ OPENROUTER_API_KEY not configured');
         return;
       }
-      
+
+      // GLM is the primary analysis path; without this config the cron would
+      // fall through to OpenRouter (and miss GLM entirely). Mirrors handleUpdatePapers.
+      const glmFallbackConfig = getGLMFallbackConfig(env);
+      if (!glmFallbackConfig.apiKey) {
+        console.error('❌ GLM_API_KEY not configured');
+        return;
+      }
+
       const today = new Date().toISOString().split('T')[0];
       console.log(`🔄 Starting daily paper update for ${today}`);
       
@@ -223,7 +294,7 @@ export default {
       // Step 2: Analyze papers
       console.log('🧠 Analyzing papers with AI...');
       debugUtils.debugLog('Starting paper analysis', { paperCount: scrapedPapers.length });
-      const analyzedPapers = await analyzePapers(scrapedPapers, apiKey);
+      const analyzedPapers = await analyzePapers(scrapedPapers, apiKey, glmFallbackConfig);
       
       console.log(`✅ Analyzed ${analyzedPapers.length} papers`);
       debugUtils.debugLog('Papers analyzed successfully', { count: analyzedPapers.length });

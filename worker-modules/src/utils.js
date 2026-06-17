@@ -111,7 +111,31 @@ export function jsonResponse(data, status = 200, maxAge = 60) {
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': maxAge >= 0 ? `public, max-age=${maxAge}, s-maxage=${Math.max(maxAge, 120)}` : 'no-store',
-      'Vary': 'Accept-Encoding',
+      'Vary': 'Accept-Encoding, Accept',
+      ...corsHeaders
+    }
+  });
+}
+
+export function textResponse(text, status = 200, maxAge = 3600) {
+  return new Response(text, {
+    status,
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': maxAge >= 0 ? `public, max-age=${maxAge}` : 'no-store',
+      'Vary': 'Accept',
+      ...corsHeaders
+    }
+  });
+}
+
+export function markdownResponse(text, status = 200, maxAge = 3600) {
+  return new Response(text, {
+    status,
+    headers: {
+      'Content-Type': 'text/markdown; charset=utf-8',
+      'Cache-Control': maxAge >= 0 ? `public, max-age=${maxAge}` : 'no-store',
+      'Vary': 'Accept',
       ...corsHeaders
     }
   });

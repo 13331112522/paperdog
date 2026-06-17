@@ -99,11 +99,15 @@ export const SOURCE_CONFIGS = {
 };
 
 // Model configuration for paper analysis
+// NOTE: glm-4-flashx is a non-reasoning model — fast (~0.6s translate, ~3s analyze)
+// and returns content directly without burning tokens on reasoning_content.
+// Avoid the glm-5.x / glm-4.5-flash reasoning models here: they waste a large
+// token budget on reasoning and risk returning empty `content` (→ "Empty GLM response").
 export const MODEL_CONFIG = {
-  analysis: 'openai/gpt-5-mini',
-  fallback_analysis: 'google/gemini-2.5-flash-preview-09-2025',
-  summary: 'openai/gpt-5-mini',
-  translation: 'google/gemini-2.5-flash-preview-09-2025'
+  analysis: 'glm-4-flashx',
+  fallback_analysis: 'openai/gpt-5-mini',
+  summary: 'glm-4-flashx',
+  translation: 'glm-4-flashx'
 };
 
 // Function to get GLM fallback configuration from environment
@@ -111,7 +115,7 @@ export function getGLMFallbackConfig(env) {
   return {
     apiKey: env.GLM_API_KEY,
     baseUrl: env.GLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4/',
-    model: env.GLM_MODEL || 'glm-4-air'
+    model: env.GLM_MODEL || 'glm-4-flashx'
   };
 }
 

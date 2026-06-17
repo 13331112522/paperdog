@@ -682,11 +682,61 @@ export function getDualColumnHTML(papers = [], dailyReport = null, formattedStat
             #paper-content code, #analysis-content code {
                 background: var(--color-gray-100);
             }
+
+            .agent-banner {
+                background: var(--color-primary-50);
+                border-left: 3px solid var(--color-primary-500);
+                padding: 0.5rem 1rem;
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+                margin: 0.75rem auto;
+                max-width: 1400px;
+                font-size: 0.8125rem;
+                color: var(--color-gray-700);
+                border-radius: 2px;
+                flex-wrap: wrap;
+            }
+            .agent-banner a {
+                color: var(--color-primary-600);
+                text-decoration: none;
+                font-weight: 600;
+                padding: 0.125rem 0.375rem;
+                border: 1px solid var(--color-primary-200);
+                border-radius: 2px;
+                font-size: 0.75rem;
+            }
+            .agent-banner a:hover {
+                background: var(--color-primary-100);
+                text-decoration: none;
+            }
+            .agent-banner .dismiss {
+                margin-left: auto;
+                cursor: pointer;
+                color: var(--color-gray-500);
+                background: none;
+                border: none;
+                font-size: 1rem;
+                line-height: 1;
+            }
+            .agent-banner .dismiss:hover {
+                color: var(--color-gray-900);
+            }
         }
     </style>
 </head>
 <body>
     ${getHeader('home', formattedStats, true)}
+
+    <div class="agent-banner">
+        <i class="fas fa-terminal" style="color:var(--color-primary-500)"></i>
+        <span>Agent-Ready</span>
+        <a href="/api/docs">API</a>
+        <a href="/mcp">MCP</a>
+        <a href="/llms.txt">CLI</a>
+        <a href="/agent">Agent</a>
+        <button class="dismiss" onclick="this.parentElement.remove()">&times;</button>
+    </div>
 
     <div class="container-fluid mt-3">
         <div class="row gx-4 gy-3">
